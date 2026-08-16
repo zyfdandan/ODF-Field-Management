@@ -1,0 +1,75 @@
+# Runtime files included in release package (build_package.ps1)
+
+## Root
+fiber_infra.py
+import_from_excel.py
+naming_rules.py
+unified_sheet.py
+bootstrap_from_sheet.py
+site_devices.py
+fix_odf_port_names.py
+netbox_config.example.json
+requirements.txt
+README-EXCEL-IMPORT.md
+README-DEPLOY.md
+AI-DEPLOY.md
+VERSION.json
+
+## field_portal/
+field_api.py
+field_service.py
+field_browser.py
+field_cache.py
+field_warmup.py
+field_audit.py
+field_locks.py
+trunk_infra.py
+room_layout.py
+portal_settings.py
+reset_test_lab.py
+generate_odf_qr.py
+index.html
+form.html
+trunk_form.html
+audit.html
+nodered_flow.json
+portal_config.example.json
+install_server.sh
+README.md
+node-red-local.tar.gz          # optional, -IncludeNodeRed
+
+## deploy/
+install_server.sh
+install_from_package.sh
+build_nodered_bundle.ps1
+build_nodered_bundle.sh
+build_package.ps1
+deploy_to_server.ps1
+deploy.env.example
+package.json
+requirements.txt
+requirements-dev.txt
+DEPLOYMENT.md
+AI-DEPLOY.md
+MANIFEST.txt
+netbox-field-api.service
+netbox-docker.service
+
+## restore/ (optional, not auto-installed)
+netbox_config.json             # secrets — copy to APP_DIR
+portal_config.json
+circuit_store.json
+
+## NOT included (supply separately)
+netbox_config.json             # secrets (except restore/)
+field_portal/portal_config.json
+venv/
+field_portal/*cache*.json
+deploy/deploy.env
+
+## Server-created at runtime
+venv/
+.nodered/
+node-red-local/                # extracted from tar
+field_portal/circuit_store.json
+field_portal/*cache*.json

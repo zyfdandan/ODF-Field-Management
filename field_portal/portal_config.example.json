@@ -1,0 +1,19 @@
+{
+  "nodered_base_url": "http://YOUR_NODERED_HOST:1880",
+  "form_path": "/odf",
+  "api_public_prefix": "/odf/api",
+  "field_api_url": "http://127.0.0.1:8765",
+  "allowed_route_keys": [
+    "机房A-ODF-01|CBL-A-B",
+    "机房B-ODF-01|CBL-A-B",
+    "机房B-ODF-01|CBL-B-C",
+    "机房C-ODF-01|CBL-B-C"
+  ],
+  "route_display_names": {
+    "机房A-ODF-01|CBL-A-B": "机房A至机房B",
+    "机房B-ODF-01|CBL-A-B": "机房B至机房A",
+    "机房B-ODF-01|CBL-B-C": "机房B至机房C",
+    "机房C-ODF-01|CBL-B-C": "机房C至机房B"
+  },
+  "cache_webhook_secret": ""
+}

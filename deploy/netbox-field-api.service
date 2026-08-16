@@ -1,0 +1,19 @@
+[Unit]
+Description=NetBox Field Portal API (ODF)
+After=network-online.target docker.service netbox-docker.service
+Wants=network-online.target
+Wants=netbox-docker.service
+
+[Service]
+Type=simple
+User=zttg
+Group=zttg
+WorkingDirectory=/home/zttg/netbox-field-portal
+ExecStart=/home/zttg/netbox-field-portal/venv/bin/python3 field_portal/field_api.py --host 127.0.0.1 --port 8765
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/zttg/netbox-field-portal/field_api.log
+StandardError=append:/home/zttg/netbox-field-portal/field_api.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>新增光缆缆段</title>
+  <style>
+    :root { --bg:#0f1419; --card:#1a2332; --accent:#2196f3; --ok:#4caf50; --err:#f44336; --text:#e8eef4; --muted:#8aa0b5; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width:520px; margin:0 auto; padding:16px 16px 40px; }
+    h1 { font-size:1.15rem; margin:0 0 4px; }
+    .sub { color:var(--muted); font-size:.82rem; margin:0 0 16px; line-height:1.45; }
+    .card { background:var(--card); border-radius:12px; padding:14px; margin-bottom:14px; }
+    label { display:block; font-size:.78rem; color:var(--muted); margin:12px 0 6px; }
+    label:first-child { margin-top:0; }
+    select, input { width:100%; padding:12px; border:1px solid #334155; border-radius:10px; background:#0d1218; color:var(--text); font-size:1rem; }
+    .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .mode { display:flex; gap:8px; margin-bottom:8px; }
+    .mode button { flex:1; padding:8px; border:1px solid #334155; border-radius:8px; background:#243044; color:var(--text); font-size:.85rem; }
+    .mode button.active { background:var(--accent); border-color:var(--accent); font-weight:600; }
+    .preview { background:#0d1218; border:1px solid #334155; border-radius:10px; padding:12px; font-size:.82rem; line-height:1.55; color:#b3d9ff; }
+    .preview strong { color:var(--text); }
+    button.submit { width:100%; margin-top:18px; padding:15px; border:none; border-radius:12px; background:var(--accent); color:#fff; font-size:1.05rem; font-weight:600; }
+    button.submit:disabled { opacity:.45; }
+    .result { margin-top:16px; padding:14px; border-radius:10px; display:none; line-height:1.5; font-size:.9rem; }
+    .result.ok { display:block; background:#1b3a1f; border:1px solid var(--ok); }
+    .result.err { display:block; background:#3a1b1b; border:1px solid var(--err); }
+    .nav { margin-bottom:12px; }
+    .nav a { color:#90caf9; font-size:.85rem; text-decoration:none; }
+    .loading { text-align:center; color:var(--muted); padding:20px; }
+    .submit-busy {
+      display:none; position:fixed; inset:0; z-index:120;
+      background:rgba(8,12,18,.72);
+      align-items:center; justify-content:center; padding:24px 20px;
+    }
+    .submit-busy.show { display:flex; }
+    .submit-busy-card {
+      width:min(100%,340px); background:#121a24; border:1px solid #2a3a4c; border-radius:14px;
+      padding:18px 16px 16px;
+    }
+    .submit-busy-title { font-size:.95rem; font-weight:700; color:#e3f2fd; margin:0 0 6px; }
+    .submit-busy-step { font-size:.8rem; color:#90caf9; line-height:1.4; min-height:2.4em; }
+    .submit-busy-bar {
+      margin-top:14px; height:8px; border-radius:999px; background:#1a2433; overflow:hidden;
+      border:1px solid #2a3a4c;
+    }
+    .submit-busy-bar > i {
+      display:block; height:100%; width:38%; border-radius:inherit;
+      background:#42a5f5;
+      animation:submitSlide 1.15s ease-in-out infinite;
+    }
+    @keyframes submitSlide {
+      0% { transform:translateX(-120%); }
+      100% { transform:translateX(320%); }
+    }
+    .submit-busy-meta { margin-top:10px; font-size:.72rem; color:var(--muted); display:flex; justify-content:space-between; gap:8px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="nav"><a href="/portal">← 返回 ODF 现场管理</a></div>
+  <h1>新增光缆缆段</h1>
+  <p class="sub">只需选（或填）两端机房、芯数、长度和接口标签（圆口-FC / 大方-SC）。缆段与 ODF 名称自动生成；接口写入已有的 NetBox 设备标签。</p>
+
+  <div id="loading" class="loading">加载机房列表…</div>
+
+  <form id="trunkForm" style="display:none">
+    <div class="card">
+      <label>所属站点</label>
+      <select id="site" required></select>
+    </div>
+
+    <div class="card">
+      <label>A 端机房</label>
+      <div class="mode" data-end="a">
+        <button type="button" class="active" data-mode="pick">选已有</button>
+        <button type="button" data-mode="new">新建机房</button>
+      </div>
+      <select id="roomA"></select>
+      <input type="text" id="roomANew" placeholder="如：焦化老浴池" style="display:none">
+
+      <label style="margin-top:14px">B 端机房</label>
+      <div class="mode" data-end="b">
+        <button type="button" class="active" data-mode="pick">选已有</button>
+        <button type="button" data-mode="new">新建机房</button>
+      </div>
+      <select id="roomB"></select>
+      <input type="text" id="roomBNew" placeholder="如：得丰办公楼梯井" style="display:none">
+    </div>
+
+    <div class="card row2">
+      <div>
+        <label>芯数</label>
+        <select id="cores" required>
+          <option value="4">4 芯</option>
+          <option value="8">8 芯</option>
+          <option value="12" selected>12 芯</option>
+          <option value="24">24 芯</option>
+          <option value="48">48 芯</option>
+          <option value="96">96 芯</option>
+        </select>
+      </div>
+      <div>
+        <label>长度(米)</label>
+        <input type="number" id="length" min="0" step="1" placeholder="可选">
+      </div>
+    </div>
+
+    <div class="card row2">
+      <div>
+        <label>A 端接口</label>
+        <select id="connA" required>
+          <option value="">请选择…</option>
+          <option value="FC">圆口-FC</option>
+          <option value="SC">大方-SC</option>
+        </select>
+      </div>
+      <div>
+        <label>B 端接口</label>
+        <select id="connB" required>
+          <option value="">请选择…</option>
+          <option value="FC">圆口-FC</option>
+          <option value="SC">大方-SC</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <label>自动生成预览</label>
+      <div class="preview" id="preview">请填写两端机房…</div>
+    </div>
+
+    <button type="submit" class="submit" id="submitBtn">导入 NetBox</button>
+  </form>
+
+  <div id="result" class="result"></div>
+</div>
+<div id="submitBusy" class="submit-busy" aria-live="polite" aria-busy="false">
+  <div class="submit-busy-card">
+    <div class="submit-busy-title" id="submitBusyTitle">正在导入光缆…</div>
+    <div class="submit-busy-step" id="submitBusyStep">请稍候，正在写入 NetBox</div>
+    <div class="submit-busy-bar" aria-hidden="true"><i></i></div>
+    <div class="submit-busy-meta">
+      <span id="submitBusyHint">创建 ODF 与端口通常需要十几秒</span>
+      <span id="submitBusyElapsed">0 秒</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const apiBase = (location.port === '1880' || location.port === '8765') ? '/api' : '/odf/api';
+  let ctx = { sites: [] };
+  let modes = { a: 'pick', b: 'pick' };
+  let previewTimer = null;
+
+  const $ = id => document.getElementById(id);
+
+  function siteRooms() {
+    const site = $('site').value;
+    const hit = ctx.sites.find(s => s.name === site);
+    return hit ? hit.rooms : [];
+  }
+
+  function fillRooms() {
+    const rooms = siteRooms();
+    ['roomA', 'roomB'].forEach(id => {
+      const sel = $(id);
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">请选择机房…</option>';
+      rooms.forEach(r => sel.append(new Option(r, r)));
+      if (cur && rooms.includes(cur)) sel.value = cur;
+    });
+  }
+
+  function setMode(end, mode) {
+    modes[end] = mode;
+    document.querySelectorAll(`.mode[data-end="${end}"] button`).forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.mode === mode);
+    });
+    const isNew = mode === 'new';
+    $(end === 'a' ? 'roomA' : 'roomB').style.display = isNew ? 'none' : '';
+    $(end === 'a' ? 'roomANew' : 'roomBNew').style.display = isNew ? '' : 'none';
+    schedulePreview();
+  }
+
+  document.querySelectorAll('.mode').forEach(bar => {
+    bar.querySelectorAll('button').forEach(btn => {
+      btn.onclick = () => setMode(bar.dataset.end, btn.dataset.mode);
+    });
+  });
+
+  function connLabel(code) {
+    const hit = (ctx.connector_options || []).find(o => o.value === code);
+    if (hit && hit.label) return hit.label;
+    if (code === 'FC') return '圆口-FC';
+    if (code === 'SC') return '大方-SC';
+    return code || '';
+  }
+
+  function payload() {
+    return {
+      site: $('site').value,
+      room_a: $('roomA').value,
+      room_b: $('roomB').value,
+      room_a_new: modes.a === 'new',
+      room_b_new: modes.b === 'new',
+      room_a_text: $('roomANew').value.trim(),
+      room_b_text: $('roomBNew').value.trim(),
+      cores: parseInt($('cores').value, 10) || 12,
+      length_m: $('length').value.trim(),
+      connector_a: $('connA').value,
+      connector_b: $('connB').value
+    };
+  }
+
+  function showResult(ok, html) {
+    const el = $('result');
+    el.className = 'result ' + (ok ? 'ok' : 'err');
+    el.innerHTML = html;
+    el.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  }
+
+  async function refreshPreview() {
+    const p = payload();
+    const hasA = modes.a === 'new' ? p.room_a_text : p.room_a;
+    const hasB = modes.b === 'new' ? p.room_b_text : p.room_b;
+    if (!p.site || !hasA || !hasB) {
+      $('preview').textContent = '请填写两端机房…';
+      return;
+    }
+    $('preview').textContent = '计算命名…';
+    try {
+      const q = new URLSearchParams({
+        site: p.site,
+        room_a: p.room_a,
+        room_b: p.room_b,
+        room_a_new: p.room_a_new ? '1' : '0',
+        room_b_new: p.room_b_new ? '1' : '0',
+        room_a_text: p.room_a_text,
+        room_b_text: p.room_b_text,
+        cores: String(p.cores),
+        length_m: p.length_m,
+        connector_a: p.connector_a,
+        connector_b: p.connector_b
+      });
+      const r = await fetch(apiBase + '/trunk-preview?' + q);
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || r.statusText);
+      const pl = data.plan;
+      const connHint = (pl.connector_a && pl.connector_b)
+        ? ''
+        : '<br><span style="color:#ffb74d">请选择两端 ODF 接口（圆口-FC / 大方-SC）</span>';
+      const labA = pl.connector_a_label || connLabel(pl.connector_a);
+      const labB = pl.connector_b_label || connLabel(pl.connector_b);
+      $('preview').innerHTML =
+        `<strong>缆段</strong> ${pl.cable}${pl.suffix ? ' <span style="color:#ffb74d">(' + pl.suffix + ')</span>' : ''}<br>` +
+        `<strong>A端 ODF</strong> ${pl.odf_a}${labA ? ' · ' + labA : ''}<br>` +
+        `<strong>B端 ODF</strong> ${pl.odf_b}${labB ? ' · ' + labB : ''}<br>` +
+        `<strong>端口</strong> 1-1 … 1-${pl.cores}（示例 ${pl.port_a_example} / ${pl.port_b_example}）` +
+        connHint;
+    } catch (e) {
+      $('preview').textContent = e.message;
+    }
+  }
+
+  function schedulePreview() {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(refreshPreview, 300);
+  }
+
+  ['site','roomA','roomB','roomANew','roomBNew','cores','length','connA','connB'].forEach(id => {
+    $(id).addEventListener('input', schedulePreview);
+    $(id).addEventListener('change', schedulePreview);
+  });
+
+  let lastConnA = '';
+  $('connA').addEventListener('change', () => {
+    const a = $('connA').value;
+    if (!$('connB').value || $('connB').value === lastConnA) {
+      $('connB').value = a;
+    }
+    lastConnA = a;
+  });
+
+  async function loadContext() {
+    const r = await fetch(apiBase + '/trunk-context');
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.statusText);
+    ctx = data;
+    $('site').innerHTML = '';
+    ctx.sites.forEach(s => $('site').append(new Option(s.name, s.name)));
+    if (ctx.sites.length === 1) $('site').value = ctx.sites[0].name;
+    const connOpts = ctx.connector_options && ctx.connector_options.length
+      ? ctx.connector_options
+      : [{value:'FC', label:'圆口-FC'}, {value:'SC', label:'大方-SC'}];
+    ['connA', 'connB'].forEach(id => {
+      const sel = $(id);
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">请选择…</option>';
+      connOpts.forEach(o => sel.append(new Option(o.label, o.value)));
+      if (cur && [...sel.options].some(opt => opt.value === cur)) sel.value = cur;
+    });
+    fillRooms();
+    $('loading').style.display = 'none';
+    $('trunkForm').style.display = '';
+    schedulePreview();
+  }
+
+  $('site').onchange = () => { fillRooms(); schedulePreview(); };
+
+  const STEPS = [
+    '正在校验机房与命名…',
+    '正在创建 ODF 框并标记接口标签…',
+    '正在导入缆段并生成端口…',
+    '正在校正端口名称…',
+    '正在刷新现场缓存…',
+    '仍在处理，请勿关闭窗口…'
+  ];
+  let busyTimer = null;
+  let busyStarted = 0;
+
+  function portalHome() {
+    return apiBase === '/odf/api' ? '/odf' : '/portal';
+  }
+
+  function stopBusy() {
+    if (busyTimer) { clearInterval(busyTimer); busyTimer = null; }
+    const box = $('submitBusy');
+    if (box) {
+      box.classList.remove('show');
+      box.setAttribute('aria-busy', 'false');
+    }
+    $('submitBtn').disabled = false;
+    $('submitBtn').textContent = '导入 NetBox';
+  }
+
+  function startBusy() {
+    stopBusy();
+    busyStarted = Date.now();
+    $('submitBtn').disabled = true;
+    $('submitBtn').textContent = '导入中…';
+    $('submitBusyTitle').textContent = '正在导入光缆…';
+    $('submitBusyStep').textContent = STEPS[0];
+    $('submitBusyElapsed').textContent = '0 秒';
+    $('submitBusyHint').textContent = '创建 ODF 与端口通常需要十几秒';
+    $('submitBusy').classList.add('show');
+    $('submitBusy').setAttribute('aria-busy', 'true');
+    let tick = 0;
+    busyTimer = setInterval(() => {
+      tick += 1;
+      const sec = Math.max(1, Math.round((Date.now() - busyStarted) / 1000));
+      $('submitBusyElapsed').textContent = sec + ' 秒';
+      if (tick % 3 === 0) {
+        $('submitBusyStep').textContent = STEPS[Math.min(STEPS.length - 1, Math.floor(tick / 3))];
+      }
+      if (sec >= 20) $('submitBusyHint').textContent = '耗时较长属正常（正在生成纤芯端口）';
+    }, 1000);
+  }
+
+  async function refreshPortalTree() {
+    try {
+      await fetch(apiBase + '/tree?refresh=1', { cache: 'no-store' });
+    } catch (_) {}
+  }
+
+  $('trunkForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const el = $('result');
+    el.className = 'result';
+    el.innerHTML = '';
+    startBusy();
+    try {
+      const body = payload();
+      if (body.connector_a !== 'FC' && body.connector_a !== 'SC') {
+        throw new Error('请选择 A 端 ODF 接口（圆口-FC 或 大方-SC）');
+      }
+      if (body.connector_b !== 'FC' && body.connector_b !== 'SC') {
+        throw new Error('请选择 B 端 ODF 接口（圆口-FC 或 大方-SC）');
+      }
+      const r = await fetch(apiBase + '/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'trunk', ...body })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || r.statusText);
+      $('submitBusyStep').textContent = '正在刷新现场 ODF 缓存…';
+      await refreshPortalTree();
+      try { sessionStorage.setItem('odfTreeStale', '1'); } catch (_) {}
+      const pl = data.plan || data.netbox || {};
+      const site = encodeURIComponent(pl.site || body.site || '');
+      const roomA = encodeURIComponent(pl.room_a || '');
+      const roomB = encodeURIComponent(pl.room_b || '');
+      const home = portalHome();
+      showResult(true,
+        `✓ ${data.message || '导入成功'}<br>` +
+        `缆段：<strong>${pl.cable || ''}</strong><br>` +
+        `ODF：${pl.odf_a || ''}（${pl.connector_a_label || connLabel(pl.connector_a || body.connector_a)}）<br>↔ ${pl.odf_b || ''}（${pl.connector_b_label || connLabel(pl.connector_b || body.connector_b)}）<br>` +
+        `纤芯 1-1 … 1-${pl.cores || ''}<br><br>` +
+        `<a href="${home}?site=${site}&room=${roomA}&refresh=1" style="color:#90caf9">打开 ${pl.room_a || 'A端机房'} 的 ODF 框</a><br>` +
+        `<a href="${home}?site=${site}&room=${roomB}&refresh=1" style="color:#90caf9">打开 ${pl.room_b || 'B端机房'} 的 ODF 框</a>`
+      );
+      loadContext().catch(() => {});
+    } catch (err) {
+      showResult(false, err.message);
+    } finally {
+      stopBusy();
+    }
+  };
+
+  loadContext().catch(err => {
+    $('loading').textContent = '加载失败：' + err.message;
+  });
+})();
+</script>
+</body>
+</html>

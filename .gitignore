@@ -1,0 +1,62 @@
+# Secrets / local config — never commit
+netbox_config.json
+field_portal/portal_config.json
+deploy/deploy.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+venv/
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Field portal runtime / caches / locks
+field_portal/*cache*.json
+field_portal/circuit_store.json
+field_portal/circuit_store.json.lock
+field_portal/edit_locks.json
+field_portal/trace_cache.json
+field_portal/fp_circuit_index.json
+field_portal/room_panel_cache.json
+field_portal/tree_cache.json
+field_portal/logs/
+field_portal/wheels/
+field_portal/wheels.tar.gz
+field_portal/node-red-local/
+field_portal/node-red-local.tar.gz
+
+# Local deploy helpers with credentials (underscore scripts)
+field_portal/_*.py
+_*.py
+_*.txt
+_*.json
+tmp_*.py
+
+# Local backups / dumps / labels with real URLs
+backup/
+qr_labels/
+*.log
+trace_path_*.html
+trace_path_*.json
+web_path_*.html
+*_report.txt
+validate_*.txt
+odf_pair_mismatch.txt
+cable_endpoint_port_report.txt
+strand_asymmetry_report.txt
+
+# Packages
+dist/
+*.hap
+*.zip
+!deploy/*.md
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,8 @@
+{
+  "name": "netbox-field-portal-nodered",
+  "private": true,
+  "description": "Bundled Node-RED for ODF field portal (no global npm on server)",
+  "dependencies": {
+    "node-red": "3.1.9"
+  }
+}

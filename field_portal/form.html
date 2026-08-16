@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>ODF 现场登记</title>
+  <style>
+    :root { --bg:#0f1419; --card:#1a2332; --accent:#2196f3; --ok:#4caf50; --err:#f44336; --text:#e8eef4; --muted:#8aa0b5; --neighbor:#2e7d32; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width:480px; margin:0 auto; padding:16px 16px 40px; }
+    h1 { font-size:1.1rem; margin:0 0 4px; }
+    .sub { color:var(--muted); font-size:.82rem; margin:0 0 12px; }
+    .odf-badge { background:var(--card); border-radius:12px; padding:14px; margin-bottom:16px; border-left:4px solid var(--accent); }
+    .odf-badge .name { font-weight:600; font-size:1rem; word-break:break-all; }
+    .odf-badge .site { color:var(--muted); font-size:.82rem; margin-top:6px; }
+    .tabs { display:flex; gap:8px; margin-bottom:14px; }
+    .tabs button { flex:1; padding:11px; border:none; border-radius:10px; background:#243044; color:var(--text); font-size:.9rem; }
+    .tabs button.active { background:var(--accent); color:#fff; font-weight:600; }
+    .panel { display:none; }
+    .panel.active { display:block; }
+    label { display:block; font-size:.78rem; color:var(--muted); margin:14px 0 6px; }
+    label .req { color:#ff8a80; }
+    input[type=text], select { width:100%; padding:12px; border:1px solid #334155; border-radius:10px; background:#0d1218; color:var(--text); font-size:1rem; appearance:none; }
+    select option.neighbor { font-weight:600; }
+    .hint { font-size:.72rem; color:var(--muted); margin-top:4px; line-height:1.4; }
+    .preview { font-size:.78rem; color:#90caf9; margin-top:4px; }
+    .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    button.submit { width:100%; margin-top:22px; padding:15px; border:none; border-radius:12px; background:var(--accent); color:#fff; font-size:1.05rem; font-weight:600; }
+    button.submit:disabled { opacity:.45; }
+    .loading { text-align:center; color:var(--muted); padding:24px 0; }
+    .result { margin-top:16px; padding:14px; border-radius:10px; display:none; line-height:1.5; font-size:.9rem; }
+    .result.ok { display:block; background:#1b3a1f; border:1px solid var(--ok); }
+    .result.err { display:block; background:#3a1b1b; border:1px solid var(--err); }
+    .result a { color:#90caf9; word-break:break-all; }
+    footer { text-align:center; color:var(--muted); font-size:.68rem; margin-top:20px; }
+    .submit-busy {
+      display:none; position:fixed; inset:0; z-index:120;
+      background:rgba(8,12,18,.72);
+      align-items:center; justify-content:center; padding:24px 20px;
+    }
+    .submit-busy.show { display:flex; }
+    .submit-busy-card {
+      width:min(100%,340px); background:#121a24; border:1px solid #2a3a4c; border-radius:14px;
+      padding:18px 16px 16px;
+    }
+    .submit-busy-title { font-size:.95rem; font-weight:700; color:#e3f2fd; margin:0 0 6px; }
+    .submit-busy-step { font-size:.8rem; color:#90caf9; line-height:1.4; min-height:2.4em; }
+    .submit-busy-bar {
+      margin-top:14px; height:8px; border-radius:999px; background:#1a2433; overflow:hidden;
+      border:1px solid #2a3a4c;
+    }
+    .submit-busy-bar > i {
+      display:block; height:100%; width:38%; border-radius:inherit;
+      background:#42a5f5;
+      animation:submitSlide 1.15s ease-in-out infinite;
+    }
+    @keyframes submitSlide {
+      0% { transform:translateX(-120%); }
+      100% { transform:translateX(320%); }
+    }
+    .submit-busy-meta { margin-top:10px; font-size:.72rem; color:var(--muted); display:flex; justify-content:space-between; gap:8px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>ODF 现场登记</h1>
+  <p class="sub">扫码定位 ODF · 下拉选配置 · 自动同步 NetBox 追踪</p>
+
+  <div class="odf-badge">
+    <div class="name" id="odfName">—</div>
+    <div class="site" id="odfSite"></div>
+  </div>
+
+  <div id="loading" class="loading">正在加载 NetBox 配置…</div>
+
+  <div id="mainUI" style="display:none">
+    <div class="tabs">
+      <button type="button" class="active" data-tab="segment">光路段</button>
+      <button type="button" data-tab="loss">光损录入</button>
+    </div>
+
+    <form id="segForm" class="panel active">
+      <label>登记方式</label>
+      <select id="mode" name="mode">
+        <option value="continue">续接已有光路</option>
+        <option value="new">新建光路</option>
+      </select>
+
+      <div id="continueBlock">
+        <label>选择光路 <span class="req">*</span></label>
+        <select id="cidSelect" name="cid"><option value="">请选择…</option></select>
+      </div>
+
+      <div id="newBlock" style="display:none">
+        <label>业务名称 <span class="req">*</span></label>
+        <input type="text" id="businessName" name="business_name" placeholder="轧钢线监控" autocomplete="off">
+        <div class="preview" id="cidPreview"></div>
+      </div>
+
+      <label>业务 IP <span class="req">*</span></label>
+      <input type="text" name="ip" id="ipInput" placeholder="10.1.10.101" inputmode="decimal" autocomplete="off">
+
+      <label>对端 ODF <span class="req">*</span></label>
+      <select name="peer_odf" id="peerOdf" required><option value="">请选择…</option></select>
+      <p class="hint">★ 标记为与本网框有缆段直连的邻居（优先选）</p>
+
+      <label>缆段编号 <span class="req">*</span></label>
+      <select name="cable" id="cableSelect" required><option value="">先选对端 ODF</option></select>
+
+      <label>本框角色</label>
+      <select name="role" id="roleSelect"></select>
+
+      <div class="row2">
+        <div>
+          <label>本端纤芯 <span class="req">*</span></label>
+          <select name="port_local" id="portLocal" required></select>
+        </div>
+        <div>
+          <label>对端纤芯 <span class="req">*</span></label>
+          <select name="port_peer" id="portPeer" required></select>
+        </div>
+      </div>
+
+      <button type="submit" class="submit" id="segBtn">提交光路段</button>
+    </form>
+
+    <form id="lossForm" class="panel">
+      <label>关联光路</label>
+      <select name="cid" id="lossCid"><option value="">（可选）</option></select>
+
+      <label>纤芯 <span class="req">*</span></label>
+      <select name="port" id="lossPort" required></select>
+
+      <label>缆段 <span class="req">*</span></label>
+      <select name="cable" id="lossCable" required></select>
+      <p class="hint">交汇 ODF 有多条缆时，请选对应该次 OTDR 的缆段</p>
+
+      <label>波长(nm)</label>
+      <select name="wavelength" id="lossWl"></select>
+
+      <label>光损(dB) <span class="req">*</span></label>
+      <input type="text" name="loss_db" placeholder="0.35" inputmode="decimal" required>
+
+      <button type="submit" class="submit" id="lossBtn">提交光损</button>
+    </form>
+
+    <div id="result" class="result"></div>
+  </div>
+  <footer>NetBox 纤缆管理 · 数据来自系统现有 ODF/缆段配置</footer>
+</div>
+<div id="submitBusy" class="submit-busy" aria-live="polite" aria-busy="false">
+  <div class="submit-busy-card">
+    <div class="submit-busy-title" id="submitBusyTitle">正在提交…</div>
+    <div class="submit-busy-step" id="submitBusyStep">请稍候，正在写入 NetBox</div>
+    <div class="submit-busy-bar" aria-hidden="true"><i></i></div>
+    <div class="submit-busy-meta">
+      <span id="submitBusyHint">提交通常需要数秒到十几秒</span>
+      <span id="submitBusyElapsed">0 秒</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const params = new URLSearchParams(location.search);
+  const odf = params.get('odf') || params.get('d') || '';
+    const apiBase = params.get('api') || (location.port === '1880' || location.port === '8765' ? '/api' : '/odf/api');
+  let ctx = null;
+
+  const $ = id => document.getElementById(id);
+  $('odfName').textContent = odf || '未指定 ODF';
+
+  document.querySelectorAll('.tabs button').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      $(btn.dataset.tab === 'loss' ? 'lossForm' : 'segForm').classList.add('active');
+    };
+  });
+
+  function fillSelect(sel, items, placeholder, valKey, labelFn) {
+    sel.innerHTML = '';
+    sel.append(new Option(placeholder, ''));
+    items.forEach(it => {
+      const v = typeof it === 'string' ? it : it[valKey];
+      const label = labelFn ? labelFn(it) : v;
+      const opt = new Option(label, v);
+      if (it.is_neighbor) opt.className = 'neighbor';
+      sel.append(opt);
+    });
+  }
+
+  function showResult(ok, html) {
+    const el = $('result');
+    el.className = 'result ' + (ok ? 'ok' : 'err');
+    el.innerHTML = html;
+    el.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  }
+
+  const SEG_STEPS = [
+    '正在校验登记内容…',
+    '正在写入本地登记…',
+    '正在同步 NetBox 缆段/跳纤…',
+    '正在重建光路追踪路径…',
+    '仍在处理，请勿关闭窗口…'
+  ];
+  const LOSS_STEPS = [
+    '正在保存光损…',
+    '正在写入 NetBox…',
+    '正在刷新配置…'
+  ];
+  let busyTimer = null;
+  let busyStarted = 0;
+  let busyBtn = null;
+  let busyBtnText = '';
+  let busySteps = SEG_STEPS;
+
+  function stopBusy() {
+    if (busyTimer) { clearInterval(busyTimer); busyTimer = null; }
+    const box = $('submitBusy');
+    if (box) {
+      box.classList.remove('show');
+      box.setAttribute('aria-busy', 'false');
+    }
+    if (busyBtn) {
+      busyBtn.disabled = false;
+      busyBtn.textContent = busyBtnText;
+      busyBtn = null;
+    }
+  }
+
+  function startBusy(title, btn, steps, hint) {
+    stopBusy();
+    busyStarted = Date.now();
+    busySteps = steps || SEG_STEPS;
+    busyBtn = btn;
+    busyBtnText = btn ? btn.textContent : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '提交中…';
+    }
+    $('submitBusyTitle').textContent = title;
+    $('submitBusyStep').textContent = busySteps[0];
+    $('submitBusyElapsed').textContent = '0 秒';
+    $('submitBusyHint').textContent = hint || '请稍候，请勿关闭窗口';
+    $('submitBusy').classList.add('show');
+    $('submitBusy').setAttribute('aria-busy', 'true');
+    let tick = 0;
+    busyTimer = setInterval(() => {
+      tick += 1;
+      const sec = Math.max(1, Math.round((Date.now() - busyStarted) / 1000));
+      $('submitBusyElapsed').textContent = sec + ' 秒';
+      if (tick % 3 === 0) {
+        $('submitBusyStep').textContent = busySteps[Math.min(busySteps.length - 1, Math.floor(tick / 3))];
+      }
+      if (sec >= 20) $('submitBusyHint').textContent = '耗时较长属正常（NetBox 重建路径）';
+    }, 1000);
+  }
+
+  function updateCablesForPeer(peer) {
+    const sel = $('cableSelect');
+    const items = (ctx.cables || []).filter(c => !peer || !c.peer || c.peer === peer);
+    fillSelect(sel, items.map(c => c.label), items.length ? '请选择缆段' : '无匹配缆段', null, null);
+    if (items.length === 1) sel.value = items[0].label;
+  }
+
+  function updateLossCables() {
+    fillSelect($('lossCable'), (ctx.cables || []).map(c => c.label), '请选择缆段');
+  }
+
+  $('mode').onchange = () => {
+    const isNew = $('mode').value === 'new';
+    $('continueBlock').style.display = isNew ? 'none' : 'block';
+    $('newBlock').style.display = isNew ? 'block' : 'none';
+    $('businessName').required = isNew;
+    $('cidSelect').required = !isNew;
+  };
+
+  $('businessName').oninput = () => {
+    const n = $('businessName').value.trim();
+    $('cidPreview').textContent = n ? '光路编号：FIB-' + n.replace(/\s+/g, '-') : '';
+  };
+
+  $('peerOdf').onchange = () => updateCablesForPeer($('peerOdf').value);
+
+  async function loadContext() {
+    if (!odf) { showResult(false, '二维码缺少 ODF 参数'); return; }
+    try {
+      const r = await fetch(apiBase + '/context?odf=' + encodeURIComponent(odf));
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || r.statusText);
+      ctx = data;
+      $('odfSite').textContent = data.site ? '站点：' + data.site : '';
+      $('loading').style.display = 'none';
+      $('mainUI').style.display = 'block';
+
+      fillSelect($('peerOdf'), data.peer_options || [], '请选择对端 ODF', 'name', it =>
+        (it.is_neighbor ? '★ ' : '') + it.name);
+      fillSelect($('roleSelect'), data.roles || [], '', 'value', it => it.label);
+      if (data.roles && data.roles.length) $('roleSelect').value = data.roles[0].value;
+
+      const fibers = data.fibers || ['1-1'];
+      fillSelect($('portLocal'), fibers, '请选择');
+      fillSelect($('portPeer'), fibers, '请选择');
+      fillSelect($('lossPort'), fibers, '请选择');
+      fillSelect($('lossWl'), data.wavelengths || ['1310'], '');
+
+      const circuits = data.circuit_options || [];
+      fillSelect($('cidSelect'), circuits, '请选择光路', 'cid', it =>
+        it.cid + (it.pending ? '（登记中）' : '') + (it.route ? ' · ' + it.route : ''));
+      fillSelect($('lossCid'), circuits, '（可选）', 'cid', it => it.cid);
+
+      updateLossCables();
+    } catch (e) {
+      $('loading').textContent = '加载失败：' + e.message;
+    }
+  }
+
+  $('segForm').onsubmit = async ev => {
+    ev.preventDefault();
+    const btn = $('segBtn');
+    const fd = new FormData(ev.target);
+    const body = Object.fromEntries(fd.entries());
+    body.odf = odf;
+    body.action = 'segment';
+    if (body.mode === 'continue') delete body.business_name;
+    else delete body.cid;
+    startBusy(body.mode === 'new' ? '正在新建光路…' : '正在续接光路…', btn, SEG_STEPS);
+    try {
+      const r = await fetch(apiBase + '/submit', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || r.statusText);
+      let html = '<strong>' + data.message + '</strong><br>光路：' + data.cid;
+      html += '<br>段数 ' + data.segment_count + ' · ' + (data.is_complete ? '路径完整 ✓' : '路径未完整');
+      if (data.route) html += '<br>路由：' + data.route;
+      if (data.trace_url) html += '<br><a href="' + data.trace_url + '" target="_blank">打开追踪页 →</a>';
+      showResult(true, html);
+      loadContext();
+    } catch (e) { showResult(false, e.message); }
+    finally { stopBusy(); }
+  };
+
+  $('lossForm').onsubmit = async ev => {
+    ev.preventDefault();
+    const btn = $('lossBtn');
+    const body = Object.fromEntries(new FormData(ev.target).entries());
+    body.odf = odf;
+    body.action = 'loss';
+    startBusy('正在保存光损…', btn, LOSS_STEPS, '正在写入 NetBox');
+    try {
+      const r = await fetch(apiBase + '/submit', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || r.statusText);
+      showResult(true, '<strong>' + data.message + '</strong><br>' + data.odf + ' ' + data.port + ' @ ' + data.cable);
+    } catch (e) { showResult(false, e.message); }
+    finally { stopBusy(); }
+  };
+
+  loadContext();
+})();
+</script>
+</body>
+</html>

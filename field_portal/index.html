@@ -1,0 +1,2541 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0a0e14">
+  <title>ODF 现场管理</title>
+  <style>
+    :root {
+      --bg:#0a0e14; --panel:#141c27; --card:#1a2433; --border:#2a3544;
+      --accent:#2196f3; --ok:#43a047; --warn:#fb8c00; --empty:#3d4f63; --used:#7e57c2;
+      --text:#e8eef4; --muted:#8aa0b5; --port:64px;
+      --safe-b: env(safe-area-inset-bottom, 0px);
+      --safe-t: env(safe-area-inset-top, 0px);
+    }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html { font-size:16px; }
+    body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); padding-bottom:var(--safe-b); }
+    header {
+      background:var(--panel); padding:calc(10px + var(--safe-t)) 14px 10px;
+      border-bottom:1px solid var(--border); position:sticky; top:0; z-index:10;
+    }
+    header h1 { margin:0; font-size:1.05rem; }
+    header p { margin:4px 0 0; font-size:.75rem; color:var(--muted); line-height:1.35; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .wrap { max-width:960px; margin:0 auto; padding:10px 10px calc(72px + var(--safe-b)); }
+    .filters { display:grid; grid-template-columns:1fr; gap:8px; margin-bottom:10px; }
+    @media(min-width:480px){ .filters { grid-template-columns:1fr 1fr; } }
+    .cable-block { background:var(--card); border-radius:12px; padding:12px; margin-bottom:10px; }
+    .odf-block { background:var(--card); border-radius:12px; margin-bottom:12px; border:1px solid var(--border); overflow:hidden; transition:box-shadow .15s, opacity .15s; }
+    .odf-block.dragging { opacity:.55; box-shadow:0 8px 24px rgba(0,0,0,.45); }
+    .odf-block.drop-target { box-shadow:0 0 0 2px var(--accent); }
+    .odf-block-head {
+      display:flex; align-items:flex-start; gap:8px; padding:10px 12px;
+      background:#121820; border-bottom:1px solid var(--border); border-left:4px solid var(--accent);
+      cursor:grab; touch-action:none; user-select:none;
+    }
+    .odf-block-head:active { cursor:grabbing; }
+    .odf-drag { flex:0 0 20px; color:var(--muted); font-size:1rem; line-height:1; padding:2px 0; letter-spacing:-2px; }
+    .odf-block-body { padding:12px; }
+    label { font-size:.72rem; color:var(--muted); display:block; margin-bottom:4px; }
+    select, input, textarea {
+      width:100%; padding:12px 10px; border:1px solid var(--border); border-radius:10px;
+      background:#0d1218; color:var(--text); font-size:16px; min-height:46px;
+    }
+    select { appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath fill='%238aa0b5' d='M1 1l5 5 5-5'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; padding-right:32px; }
+    .odf-head { background:var(--card); border-radius:12px; padding:14px; margin:10px 0; border-left:4px solid var(--accent); }
+    .odf-head h2 { margin:0 0 6px; font-size:.95rem; word-break:break-all; line-height:1.35; }
+    .odf-meta { font-size:.75rem; color:var(--muted); line-height:1.45; }
+    .odf-meta a { color:#90caf9; }
+    .cable-block { background:var(--card); border-radius:12px; padding:12px; margin-bottom:10px; }
+    .cable-title { font-size:.85rem; font-weight:600; margin-bottom:2px; word-break:break-all; }
+    .cable-sub { font-size:.72rem; color:var(--muted); margin-bottom:10px; }
+    .port-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(var(--port), 1fr)); gap:8px; }
+    .port {
+      min-height:var(--port); border-radius:12px; border:2px solid var(--border);
+      background:#0d1218; padding:8px 4px; cursor:pointer; touch-action:manipulation;
+      display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;
+    }
+    .port:active { transform:scale(.97); background:#121820; }
+    .port.empty { border-style:dashed; border-color:var(--empty); }
+    .port.in-use { border-color:var(--used); background:#1a1528; }
+    .port.linked { border-color:var(--ok); background:#142218; }
+    .port.has-loss { box-shadow:0 0 0 2px var(--accent); }
+    .port .badge-used { font-size:.62rem; font-weight:700; color:#ce93d8; margin-bottom:2px; }
+    .port .cid-tag { font-size:.55rem; color:#b39ddb; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .port .fiber { font-size:.82rem; font-weight:700; }
+    .port .name { font-size:.6rem; color:var(--muted); margin-top:3px; word-break:break-all; line-height:1.15; max-height:2.3em; overflow:hidden; }
+    .port .loss { font-size:.62rem; color:#90caf9; margin-top:2px; }
+    .port .local { font-size:.58rem; color:var(--warn); margin-top:2px; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .legend { display:flex; flex-wrap:wrap; gap:10px; font-size:.68rem; color:var(--muted); margin:6px 0 12px; }
+    .legend span::before { content:''; display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:4px; vertical-align:middle; }
+    .legend .l-empty::before { border:1px dashed var(--empty); background:#0d1218; }
+    .legend .l-linked::before { background:#142218; border:1px solid var(--ok); }
+    .legend .l-used::before { background:#1a1528; border:1px solid var(--used); }
+    .legend .l-loss::before { background:#0d1218; box-shadow:0 0 0 2px var(--accent); }
+    .modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:100; align-items:flex-end; justify-content:center; }
+    .modal-bg.open { display:flex; }
+    .modal {
+      position:relative;
+      background:var(--panel); width:100%; max-width:480px; max-height:92vh; overflow:auto;
+      border-radius:18px 18px 0 0; padding:0 16px calc(16px + var(--safe-b));
+      -webkit-overflow-scrolling:touch;
+    }
+    @media(min-width:640px){ .modal-bg { align-items:center; padding:16px; } .modal { border-radius:16px; max-height:88vh; } }
+    .modal-handle { width:40px; height:4px; background:#3a4a5c; border-radius:2px; margin:10px auto 8px; }
+    @media(min-width:640px){ .modal-handle { display:none; } }
+    .modal-head { padding:4px 0 12px; border-bottom:1px solid var(--border); margin-bottom:12px; position:relative; }
+    .modal-head h3 { margin:0 28px 4px 0; font-size:1rem; line-height:1.35; }
+    .modal-head .sub { color:var(--muted); font-size:.76rem; line-height:1.4; }
+    .modal-head-actions { margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; }
+    .port-sync-btn { padding:8px 12px; min-height:40px; font-size:.82rem; width:auto; flex:0 0 auto; }
+    .port-sync-btn.syncing { opacity:.75; pointer-events:none; }
+    .close-x { position:absolute; right:0; top:0; background:none; border:none; color:var(--muted); font-size:1.6rem; cursor:pointer; line-height:1; padding:4px 8px; min-width:44px; min-height:44px; }
+    .tabs { display:flex; gap:6px; margin-bottom:12px; }
+    .tabs button { flex:1; padding:11px 6px; border:none; border-radius:10px; background:var(--card); color:var(--text); font-size:.88rem; min-height:44px; }
+    .tabs button.active { background:var(--accent); color:#fff; font-weight:600; }
+    .tab-panel { display:none; }
+    .tab-panel.active { display:block; }
+    .field { margin-bottom:12px; }
+    .readonly-box {
+      background:#0d1218; border:1px solid var(--border); border-radius:10px; padding:10px 12px;
+      font-size:.85rem; line-height:1.45; word-break:break-all;
+    }
+    .readonly-box .lbl { font-size:.68rem; color:var(--muted); margin-bottom:2px; }
+    .hint { font-size:.7rem; color:var(--muted); margin-top:4px; line-height:1.4; }
+    .row2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    @media(max-width:360px){ .row2 { grid-template-columns:1fr; } }
+    .seg-cards { display:grid; gap:8px; margin-bottom:12px; }
+    .radio-card {
+      display:block; border:2px solid var(--border); border-radius:12px; padding:12px;
+      cursor:pointer; background:#0d1218; min-height:52px;
+    }
+    .radio-card input { position:absolute; opacity:0; pointer-events:none; }
+    .radio-card:has(input:checked) { border-color:var(--accent); background:#152535; }
+    .radio-card .t { font-size:.88rem; font-weight:600; }
+    .radio-card .d { font-size:.7rem; color:var(--muted); margin-top:4px; line-height:1.35; }
+    .cond-block { display:none; margin-top:8px; padding-top:8px; border-top:1px dashed var(--border); }
+    .cond-block.show { display:block; }
+    .btn {
+      width:100%; padding:14px; border:none; border-radius:12px; background:var(--accent);
+      color:#fff; font-size:1rem; font-weight:600; margin-top:10px; min-height:48px; touch-action:manipulation;
+    }
+    .detail-box { background:#0d1218; border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:10px; position:relative; }
+    .detail-box h4 { margin:0 0 8px; font-size:.88rem; color:#ce93d8; }
+    .detail-row { display:flex; justify-content:space-between; gap:8px; font-size:.78rem; padding:5px 0; border-bottom:1px solid #1e2836; }
+    .detail-row:last-child { border-bottom:none; }
+    .detail-row .k { color:var(--muted); flex-shrink:0; }
+    .detail-row .v { text-align:right; word-break:break-all; }
+    .detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px 10px; margin-bottom:10px; }
+    .detail-stat { background:#111820; border:1px solid #243040; border-radius:8px; padding:8px 10px; }
+    .detail-stat .lbl { font-size:.62rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+    .detail-stat .val { font-size:.82rem; font-weight:600; margin-top:3px; }
+    .detail-name-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:3px; }
+    .detail-name-row .val { margin-top:0; flex:1; min-width:0; }
+    .btn-rename { font-size:.68rem; padding:4px 8px; border-radius:6px; border:1px solid #3a4a5c;
+      background:#1a2330; color:#90caf9; cursor:pointer; flex-shrink:0; }
+    .btn-rename:hover { border-color:#64b5f6; color:#bbdefb; }
+    .btn-rename:disabled { opacity:.5; cursor:not-allowed; }
+    .trace-flow { margin-top:10px; border:1px solid #243040; border-radius:10px; background:linear-gradient(180deg,#0a0f14 0%,#0d1218 100%); overflow:hidden; }
+    .trace-flow-head { display:flex; justify-content:space-between; align-items:center; padding:8px 12px; font-size:.72rem; font-weight:600; color:#90caf9; background:#121a24; border-bottom:1px solid #243040; }
+    .trace-hop-count { font-size:.65rem; color:var(--muted); font-weight:500; }
+    .trace-timeline { padding:12px 10px 6px; max-height:min(52vh,360px); overflow-y:auto; }
+    .tl-item { display:flex; gap:10px; position:relative; padding-bottom:16px; }
+    .tl-item:last-child { padding-bottom:4px; }
+    .tl-item:not(:last-child)::after { content:''; position:absolute; left:15px; top:34px; bottom:2px; width:2px; background:linear-gradient(180deg,#37474f 0%,#2196f3 55%,#37474f 100%); opacity:.85; }
+    .tl-icon { width:32px; height:32px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:.62rem; font-weight:700; flex-shrink:0; z-index:1; letter-spacing:-.02em; }
+    .tl-odf { background:#152535; border:1px solid #2196f3; color:#90caf9; }
+    .tl-cable { background:#1e1830; border:1px solid #7e57c2; color:#ce93d8; }
+    .tl-jump { background:#142318; border:1px solid #43a047; color:#a5d6a7; }
+    .tl-splice { background:#2a2218; border:1px solid #ffb74d; color:#ffcc80; }
+    .tl-current .tl-icon { box-shadow:0 0 0 2px #ffb74d, 0 0 12px rgba(255,183,77,.35); }
+    .tl-current .tl-title { color:#ffb74d; }
+    .tl-body { flex:1; min-width:0; padding-top:2px; }
+    .tl-title { font-size:.76rem; font-weight:600; line-height:1.35; word-break:break-all; }
+    .tl-here { display:inline-block; font-size:.58rem; font-weight:700; color:#1a1a1a; background:#ffb74d; padding:1px 5px; border-radius:4px; vertical-align:middle; margin-left:4px; }
+    .tl-sub { font-size:.68rem; color:#b0bec5; margin-top:3px; font-family:ui-monospace,monospace; }
+    .tl-detail { font-size:.64rem; color:var(--muted); margin-top:3px; line-height:1.4; }
+    .tl-actions { margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; }
+    .btn-swap {
+      padding:4px 10px; font-size:.64rem; font-weight:600; border-radius:6px;
+      border:1px solid #5e35b1; background:#1a1528; color:#ce93d8; cursor:pointer;
+      touch-action:manipulation;
+    }
+    .btn-swap:active { background:#251a38; }
+    .swap-overlay {
+      display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,.55);
+      align-items:center; justify-content:center; padding:16px;
+    }
+    .swap-overlay.show { display:flex; }
+    .swap-card {
+      width:min(420px,100%); background:var(--panel); border:1px solid var(--border);
+      border-radius:14px; padding:16px; box-shadow:0 12px 40px rgba(0,0,0,.45);
+    }
+    .swap-card h4 { margin:0 0 6px; font-size:.92rem; color:#ce93d8; }
+    .swap-card .swap-sub { font-size:.72rem; color:var(--muted); margin-bottom:12px; line-height:1.45; }
+    .swap-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+    .swap-row label { font-size:.68rem; color:var(--muted); display:block; margin-bottom:4px; }
+    .swap-cross { display:flex; align-items:center; gap:8px; margin:8px 0 12px; font-size:.74rem; }
+    .swap-cross input { width:auto; min-height:auto; }
+    .swap-actions { display:flex; gap:8px; margin-top:12px; }
+    .swap-actions .btn { flex:1; margin-top:0; padding:12px; font-size:.85rem; }
+    .swap-actions .btn.secondary { background:var(--card); }
+    .trace-list { margin:8px 0 0; padding-left:18px; font-size:.74rem; color:var(--muted); line-height:1.45; }
+    .trace-list li { margin-bottom:4px; }
+    .btn.trace { background:#5e35b1; margin-top:6px; }
+    .btn.secondary { background:var(--card); color:var(--text); border:1px solid var(--border); }
+    .btn.danger { background:#8b2635; color:#fff; }
+    .btn.danger.secondary-outline { background:transparent; color:#ef9a9a; border:1px solid #8b2635; width:auto; flex:1; padding:10px 12px; font-size:.85rem; margin-top:0; }
+    .release-actions { display:none; gap:8px; margin-top:12px; padding-top:12px; border-top:1px dashed var(--border); flex-wrap:wrap; }
+    .release-actions.show { display:flex; }
+    .release-actions .btn.danger { flex:1; margin-top:0; padding:12px; font-size:.88rem; }
+    .release-hint { font-size:.72rem; color:var(--muted); line-height:1.45; margin-top:8px; width:100%; }
+    .toast { margin-top:12px; padding:12px; border-radius:10px; display:none; font-size:.85rem; line-height:1.45; }
+    .toast.ok { display:block; background:#1b3a1f; border:1px solid var(--ok); }
+    .toast.err { display:block; background:#3a1b1b; border:1px solid #f44336; }
+    .toast.loading { display:block; background:#1a2433; border:1px solid var(--border); color:var(--muted); }
+    .toast a { color:#90caf9; }
+    .submit-busy {
+      display:none; position:fixed; inset:0; z-index:220;
+      background:rgba(8,12,18,.72); backdrop-filter:blur(2px);
+      align-items:center; justify-content:center; padding:24px 20px;
+    }
+    .submit-busy.show { display:flex; }
+    .submit-busy-card {
+      width:min(100%,340px); background:#121a24; border:1px solid #2a3a4c; border-radius:14px;
+      padding:18px 16px 16px; box-shadow:0 12px 40px rgba(0,0,0,.45);
+    }
+    .submit-busy-title { font-size:.95rem; font-weight:700; color:#e3f2fd; margin:0 0 6px; }
+    .submit-busy-step { font-size:.8rem; color:#90caf9; line-height:1.4; min-height:2.4em; }
+    .submit-busy-bar {
+      margin-top:14px; height:8px; border-radius:999px; background:#1a2433; overflow:hidden;
+      border:1px solid #2a3a4c;
+    }
+    .submit-busy-bar > i {
+      display:block; height:100%; width:38%; border-radius:inherit;
+      background:linear-gradient(90deg,#1565c0,#42a5f5,#90caf9);
+      animation:submitSlide 1.15s ease-in-out infinite;
+    }
+    @keyframes submitSlide {
+      0% { transform:translateX(-120%); }
+      100% { transform:translateX(320%); }
+    }
+    .submit-busy-meta { margin-top:10px; font-size:.72rem; color:var(--muted); display:flex; justify-content:space-between; gap:8px; }
+    .btn.busy { opacity:.75; cursor:wait; }
+    .lock-banner {
+      display:none; margin:0 0 10px; padding:10px 12px; border-radius:10px;
+      background:#3a2a12; border:1px solid #fb8c00; color:#ffe0b2; font-size:.82rem; line-height:1.4;
+    }
+    .lock-banner.show { display:block; }
+    .lock-banner.mine { background:#122a1a; border-color:#43a047; color:#c8e6c9; }
+    .lock-banner .lock-actions { margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; }
+    .lock-banner button {
+      border:1px solid #fb8c00; background:#2a1c0a; color:#ffe0b2;
+      border-radius:8px; padding:6px 10px; font-size:.78rem; cursor:pointer;
+    }
+    .lock-banner.mine button { border-color:#43a047; color:#c8e6c9; background:#0d1a12; }
+    .odf-block-head .conn-wrap {
+      display:inline-block; position:relative; margin-left:10px; vertical-align:middle;
+    }
+    .odf-block-head .conn-badge {
+      display:inline-flex; align-items:center; justify-content:center;
+      margin:0; padding:2px 8px; width:auto; min-width:0; min-height:0; height:auto;
+      border-radius:999px; font-size:.68rem; font-weight:700; letter-spacing:0;
+      vertical-align:middle; line-height:1.35; white-space:nowrap;
+      box-shadow:0 1px 4px rgba(0,0,0,.35);
+      cursor:pointer; font-family:inherit;
+    }
+    .odf-block-head .conn-badge.conn-fc {
+      color:#ffebee; border:1px solid #c62828;
+      background:linear-gradient(135deg,#7f1d1d 0%,#b71c1c 100%);
+    }
+    .odf-block-head .conn-badge.conn-sc {
+      color:#e8f5e9; border:1px solid #81c784;
+      background:linear-gradient(135deg,#2e7d32 0%,#66bb6a 100%);
+    }
+    .odf-block-head .conn-badge:disabled { opacity:.65; cursor:wait; }
+    .odf-block-head .conn-menu {
+      display:none; position:absolute; top:calc(100% + 4px); left:0; z-index:30;
+      min-width:7.2em; padding:4px; border-radius:10px;
+      background:#121a24; border:1px solid #2a3a4c;
+      box-shadow:0 8px 20px rgba(0,0,0,.45);
+    }
+    .odf-block-head .conn-wrap.open .conn-menu { display:block; }
+    .odf-block-head .conn-menu button {
+      display:block; width:100%; text-align:left;
+      border:none; background:transparent; color:#e8eef4;
+      padding:8px 10px; border-radius:8px; font-size:.78rem; cursor:pointer;
+    }
+    .odf-block-head .conn-menu button:hover,
+    .odf-block-head .conn-menu button.active { background:#1e2a38; }
+    .odf-block-head .conn-menu button[data-value="SC"].active { color:#c8e6c9; }
+    .odf-block-head .conn-menu button[data-value="FC"].active { color:#ef9a9a; }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>ODF 现场管理</h1>
+    <p>选择厂区 → 机房 · 拖拽 ODF 框标题调整机柜顺序</p>
+    <p style="margin-top:4px"><a href="/trunk" style="color:#90caf9;font-size:.78rem;text-decoration:none">＋ 新增光缆缆段</a></p>
+  </div>
+</header>
+<div class="wrap">
+  <div class="filters">
+    <div><label>厂区</label><select id="selSite"><option value="">请选择厂区</option></select></div>
+    <div><label>机房</label><select id="selRoom" disabled><option value="">请先选厂区</option></select></div>
+  </div>
+  <div class="legend">
+    <span class="l-empty">空闲</span>
+    <span class="l-used">已用</span>
+    <span class="l-linked">已跳接</span>
+    <span class="l-loss">已录光损</span>
+  </div>
+  <div id="panelArea"><div class="empty-hint">请选择机房查看 ODF 框</div></div>
+</div>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-head">
+      <button type="button" class="close-x" id="modalClose" aria-label="关闭">&times;</button>
+      <h3 id="modalTitle">端口</h3>
+      <div class="sub" id="modalSub"></div>
+      <div class="modal-head-actions">
+        <button type="button" id="btnPortSync" class="btn secondary port-sync-btn">↻ 同步端口状态</button>
+      </div>
+    </div>
+    <div id="lockBanner" class="lock-banner" role="status"></div>
+    <div class="tabs" id="modalTabs">
+      <button type="button" class="active" data-tab="detail" id="tabDetail">详情</button>
+      <button type="button" data-tab="loss">光损</button>
+      <button type="button" data-tab="biz" id="tabBiz">业务</button>
+    </div>
+
+    <div id="detailPanel" class="tab-panel active">
+      <div id="detailContent"><div class="empty-hint" style="padding:20px">加载业务信息…</div></div>
+      <div id="releaseActions" class="release-actions">
+        <button type="button" id="btnReleasePort" class="btn danger">解除本端口登记</button>
+        <button type="button" id="btnDeleteCircuit" class="btn danger secondary-outline">删除整条光路</button>
+        <button type="button" id="btnClearJumps" class="btn danger secondary-outline">仅删除跳纤</button>
+        <p class="release-hint">改芯：在下方链路追踪对应段点「换芯」；或解除登记后在新纤芯续接。本地登记中的光路请用本页删除，不要去 NetBox 打开追踪（无 path 时会变成 /None 报错）。</p>
+      </div>
+    </div>
+
+    <form id="lossForm" class="tab-panel">
+      <div class="readonly-box" style="margin-bottom:12px">
+        <div class="lbl">缆段（当前端口所属）</div>
+        <div id="lossCableShow">—</div>
+      </div>
+      <input type="hidden" name="cable" id="lossCable">
+      <div class="field"><label>纤芯</label><select id="lossFiber" name="port"></select></div>
+      <div class="row2">
+        <div class="field"><label>光损(dB)</label><input name="loss_db" id="lossDb" placeholder="0.35" inputmode="decimal"></div>
+        <div class="field"><label>波长</label><select name="wavelength" id="lossWl"><option>1310</option><option>1550</option></select></div>
+      </div>
+      <div class="field"><label>关联光路</label><select id="lossCid" name="cid"><option value="">（可选）</option></select></div>
+      <button type="submit" class="btn" id="lossSubmitBtn">保存光损</button>
+    </form>
+
+    <form id="bizForm" class="tab-panel">
+      <div id="bizGuide" class="hint" style="background:#121820;padding:10px;border-radius:8px;margin-bottom:12px;line-height:1.45"></div>
+      <div class="seg-cards">
+        <div class="readonly-box"><div class="lbl">缆段（系统确定）</div><div id="bizCableShow">—</div></div>
+        <div class="readonly-box"><div class="lbl">对端 ODF（系统确定）</div><div id="bizPeerShow">—</div></div>
+      </div>
+      <input type="hidden" name="cable" id="bizCable">
+      <input type="hidden" name="peer_odf" id="bizPeer">
+      <input type="hidden" name="role" value="a">
+
+      <div class="field"><label>登记方式</label>
+        <select id="bizMode" name="mode"><option value="new">新建光路（起点）</option><option value="continue">续接已有光路</option></select>
+      </div>
+      <div class="field" id="bizNewBlock"><label>业务名称</label><input name="business_name" id="bizName" placeholder="例：轧钢监控专线" autocomplete="off"></div>
+      <div class="field" id="bizContBlock" style="display:none"><label>已有光路</label><select id="bizCid" name="cid"></select></div>
+
+      <div class="row2">
+        <div class="field"><label>本端纤芯</label><select name="port_local" id="bizPortLocal"></select></div>
+        <div class="field"><label>对端纤芯</label><select name="port_peer" id="bizPortPeer"></select></div>
+      </div>
+      <p class="hint">对端纤芯通常与本端相同。</p>
+
+      <div class="field"><label>业务 IP（可选）</label><input name="ip" id="bizIp" placeholder="10.1.10.101" inputmode="decimal" autocomplete="off"></div>
+
+      <label style="margin-top:4px">本端去向（Front 侧 · 交换机/跳纤）</label>
+      <div class="seg-cards" id="localTypeCards"></div>
+      <input type="hidden" name="local_type" id="bizLocalType" value="trunk_only">
+
+      <div class="cond-block" id="jumpBlock">
+        <div class="field"><label>跳纤目标 ODF</label><select name="jump_odf" id="bizJumpOdf"></select></div>
+        <div class="field"><label>目标纤芯</label><select name="jump_fiber" id="bizJumpFiber"></select></div>
+        <p class="hint" id="jumpHint">同框换缆跳纤：本端与目标可不同纤芯（如 1-1→1-3）；同缆段跳纤须相同纤芯号。</p>
+      </div>
+      <div class="cond-block" id="deviceBlock">
+        <div id="deviceEmptyHint" class="hint" style="display:none;color:#ffb74d;margin-bottom:8px"></div>
+        <div class="field"><label>本机房设备（交换机/光模块）</label><select name="device" id="bizDevice"></select></div>
+        <div class="field"><label>光口/模块端口</label><select name="device_port" id="bizDevicePort"></select></div>
+        <p class="hint">提交后在 NetBox 创建 ODF 前置端口 ↔ 设备光口 的跳线。</p>
+      </div>
+
+      <button type="submit" class="btn" id="bizSubmitBtn">提交业务</button>
+    </form>
+    <div id="modalToast" class="toast"></div>
+    <div id="submitBusy" class="submit-busy" aria-live="polite" aria-busy="false">
+      <div class="submit-busy-card">
+        <div class="submit-busy-title" id="submitBusyTitle">正在提交…</div>
+        <div class="submit-busy-step" id="submitBusyStep">请稍候，正在写入 NetBox</div>
+        <div class="submit-busy-bar" aria-hidden="true"><i></i></div>
+        <div class="submit-busy-meta">
+          <span id="submitBusyHint">提交通常需要数秒到十几秒</span>
+          <span id="submitBusyElapsed">0 秒</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="swapOverlay" class="swap-overlay" aria-hidden="true">
+  <div class="swap-card" role="dialog" aria-labelledby="swapTitle">
+    <h4 id="swapTitle">换芯</h4>
+    <div id="swapSub" class="swap-sub"></div>
+    <div class="swap-row">
+      <div>
+        <label id="swapLabelA">A 端纤芯</label>
+        <select id="swapPortA"></select>
+      </div>
+      <div id="swapPortBWrap">
+        <label id="swapLabelB">B 端纤芯</label>
+        <select id="swapPortB"></select>
+      </div>
+    </div>
+    <label class="swap-cross"><input type="checkbox" id="swapCrossFiber"> 异纤（两端纤芯不同，少见）</label>
+    <div class="swap-actions">
+      <button type="button" class="btn secondary" id="swapCancel">取消</button>
+      <button type="button" class="btn" id="swapConfirm">确认换芯</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const api = (location.pathname || '').startsWith('/odf') ? '/odf/api' : '/api';
+  let tree = { sites: [] }, panel = null, roomRoutes = [], roomOrder = [];
+  let currentSite = '', currentRoom = '', currentOdf = '', currentCable = '', currentDisplayName = '', selectedPort = null;
+  let editLockToken = '';
+  let editLockKey = '';
+  let editLockTimer = null;
+  let editLockReadOnly = false;
+
+  function deviceInfoPayload() {
+    try {
+      return {
+        platform: navigator.platform || '',
+        language: navigator.language || '',
+        timezone: (Intl.DateTimeFormat().resolvedOptions().timeZone || ''),
+        screen: (screen.width || 0) + 'x' + (screen.height || 0),
+        vendor: navigator.vendor || ''
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function clearEditLockTimer() {
+    if (editLockTimer) {
+      clearInterval(editLockTimer);
+      editLockTimer = null;
+    }
+  }
+
+  function setLockBanner(html, { mine = false, show = true } = {}) {
+    const el = $('lockBanner');
+    if (!el) return;
+    el.className = 'lock-banner' + (show ? ' show' : '') + (mine ? ' mine' : '');
+    el.innerHTML = html || '';
+  }
+
+  function hideLockBanner() {
+    setLockBanner('', { show: false });
+  }
+
+  async function apiPost(body) {
+    const payload = Object.assign({}, body || {});
+    if (!payload.device_info) payload.device_info = deviceInfoPayload();
+    if (editLockToken && !payload.lock_token) payload.lock_token = editLockToken;
+    const r = await fetch(api + '/submit', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const err = new Error(d.error || d.message || r.statusText || ('HTTP ' + r.status));
+      err.status = r.status;
+      err.payload = d;
+      throw err;
+    }
+    return d;
+  }
+
+  async function acquireEditLock(port, { force = false } = {}) {
+    if (!port || !currentOdf) return null;
+    const fiber = port.fiber || '';
+    const cable = port.cable || currentCable || '';
+    try {
+      const d = await apiPost({
+        action: 'edit_lock',
+        odf: currentOdf,
+        cable,
+        fiber,
+        force: !!force,
+        lock_token: editLockToken || '',
+        device_info: deviceInfoPayload(),
+      });
+      editLockReadOnly = false;
+      editLockToken = d.token || editLockToken || '';
+      editLockKey = currentOdf + '|' + cable + '|' + fiber;
+      setLockBanner(esc(d.message || '已锁定此端口'), { mine: true, show: true });
+      startEditLockRenew(port);
+      setFormsDisabled(false);
+      return d;
+    } catch (err) {
+      const d = err.payload || {};
+      if (err.status === 409 || d.conflict) {
+        editLockReadOnly = true;
+        editLockToken = '';
+        clearEditLockTimer();
+        const holder = esc(d.holder || d.message || '其他人');
+        setLockBanner(
+          '<div>' + esc(d.message || ('该端口正被编辑中：' + holder)) + '</div>' +
+          '<div class="lock-actions"><button type="button" id="btnForceLock">强制接管编辑</button></div>',
+          { mine: false, show: true }
+        );
+        const btn = $('btnForceLock');
+        if (btn) btn.onclick = () => acquireEditLock(port, { force: true });
+        setFormsDisabled(true);
+        return d;
+      }
+      setLockBanner('编辑锁获取失败：' + esc(err.message || err), { show: true });
+      return null;
+    }
+  }
+
+  function startEditLockRenew(port) {
+    clearEditLockTimer();
+    editLockTimer = setInterval(() => {
+      if (!$('modalBg').classList.contains('open') || !editLockToken || !port) {
+        clearEditLockTimer();
+        return;
+      }
+      apiPost({
+        action: 'edit_renew',
+        odf: currentOdf,
+        cable: port.cable || currentCable || '',
+        fiber: port.fiber || '',
+        lock_token: editLockToken,
+        device_info: deviceInfoPayload(),
+      }).then(d => {
+        if (d && d.message) setLockBanner(esc(d.message), { mine: true, show: true });
+      }).catch(err => {
+        const d = err.payload || {};
+        if (err.status === 409 || d.conflict) {
+          editLockReadOnly = true;
+          editLockToken = '';
+          clearEditLockTimer();
+          setLockBanner(esc(d.message || '编辑锁已被他人接管'), { show: true });
+          setFormsDisabled(true);
+        }
+      });
+    }, 60000);
+  }
+
+  async function releaseEditLock() {
+    clearEditLockTimer();
+    const port = selectedPort;
+    const token = editLockToken;
+    const odf = currentOdf;
+    const cable = (port && port.cable) || currentCable || '';
+    const fiber = (port && port.fiber) || '';
+    editLockToken = '';
+    editLockKey = '';
+    editLockReadOnly = false;
+    hideLockBanner();
+    setFormsDisabled(false);
+    if (!token || !odf || !fiber) return;
+    try {
+      await apiPost({
+        action: 'edit_unlock',
+        odf,
+        cable,
+        fiber,
+        lock_token: token,
+        device_info: deviceInfoPayload(),
+      });
+    } catch (_) {}
+  }
+
+  function setFormsDisabled(disabled) {
+    ['lossForm', 'bizForm'].forEach(id => {
+      const form = $(id);
+      if (!form) return;
+      form.querySelectorAll('input, select, textarea, button').forEach(el => {
+        if (el.id === 'btnForceLock') return;
+        el.disabled = !!disabled;
+      });
+    });
+    ['btnReleasePort', 'btnClearJumps', 'btnDeleteCircuit'].forEach(id => {
+      const el = $(id);
+      if (el) el.disabled = !!disabled;
+    });
+  }
+  let modalPortEl = null;
+  let bizFormInitKey = '';
+  let dragBlock = null, dragPointerId = null;
+  const $ = id => document.getElementById(id);
+
+  function parseRouteValue(val) {
+    if (!val) return { odf: '', cable: '', routeKey: '' };
+    const i = val.indexOf('|');
+    if (i < 0) return { odf: val, cable: '', routeKey: val };
+    return { odf: val.slice(0, i), cable: val.slice(i + 1), routeKey: val };
+  }
+
+  function routeOptionLabel(o) {
+    return o.display_name || o.name;
+  }
+
+  async function apiGet(path) {
+    const r = await fetch(api + path);
+    const text = await r.text();
+    let d;
+    try { d = JSON.parse(text); } catch (e) {
+      throw new Error('接口返回异常（HTTP ' + r.status + '），请确认 field API 已启动');
+    }
+    if (!r.ok) throw new Error(d.error || r.statusText || ('HTTP ' + r.status));
+    return d;
+  }
+  async function apiPostOrder(body) {
+    const r = await fetch(api + '/room-order', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.statusText);
+    return d;
+  }
+
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+  function tlKindMeta(kind) {
+    const map = {
+      odf: { glyph: 'ODF', cls: 'tl-odf' },
+      cable: { glyph: '缆', cls: 'tl-cable' },
+      jump: { glyph: '跳', cls: 'tl-jump' },
+      splice: { glyph: '熔', cls: 'tl-splice' },
+    };
+    return map[kind] || { glyph: '·', cls: 'tl-odf' };
+  }
+
+  let pendingSwap = null;
+  const traceSwapRegistry = new Map();
+
+  function renderTraceTimeline(timeline) {
+    if (!timeline || !timeline.length) return '';
+    let html = '<div class="trace-flow">';
+    html += `<div class="trace-flow-head"><span>全程链路追踪</span><span class="trace-hop-count">${timeline.length} 跳</span></div>`;
+    html += '<div class="trace-timeline">';
+    timeline.forEach((step, idx) => {
+      const m = tlKindMeta(step.kind);
+      const cur = step.is_current ? ' tl-current' : '';
+      html += `<div class="tl-item${cur}">`;
+      html += `<div class="tl-icon ${m.cls}">${m.glyph}</div>`;
+      html += '<div class="tl-body">';
+      html += `<div class="tl-title">${esc(step.title)}${step.is_current ? ' <span class="tl-here">当前</span>' : ''}</div>`;
+      if (step.subtitle) html += `<div class="tl-sub">${esc(step.subtitle)}</div>`;
+      if (step.detail) html += `<div class="tl-detail">${esc(step.detail)}</div>`;
+      if (step.swap) {
+        const swapKey = `${step.swap.cid}:${step.swap.segment_index}:${idx}`;
+        traceSwapRegistry.set(swapKey, step.swap);
+        const kindLabel = step.swap.segment_type === 'jump' ? '跳纤换芯' : '换芯';
+        const autoHint = step.swap.segment_type === 'jump' ? ' title="自动选取下一空闲纤芯"' : '';
+        html += `<div class="tl-actions"><button type="button" class="btn-swap" data-swap-key="${esc(swapKey)}"${autoHint}>${kindLabel}</button></div>`;
+      }
+      html += '</div></div>';
+    });
+    html += '</div></div>';
+    return html;
+  }
+
+  function fiberSelectOptions(selected) {
+    let html = '';
+    for (let p = 1; p <= 12; p++) {
+      const f = '1-' + p;
+      html += `<option value="${f}"${f === selected ? ' selected' : ''}>${f}</option>`;
+    }
+    return html;
+  }
+
+  function fillFiberSelect(el, selected) {
+    if (!el) return;
+    el.innerHTML = fiberSelectOptions(selected || '1-1');
+    if (selected && !el.querySelector(`option[value="${selected}"]`)) {
+      el.insertAdjacentHTML('afterbegin', `<option value="${esc(selected)}" selected>${esc(selected)}</option>`);
+    }
+  }
+
+  function updateSwapCrossUi() {
+    const cross = $('swapCrossFiber') && $('swapCrossFiber').checked;
+    const wrap = $('swapPortBWrap');
+    if (wrap) wrap.style.display = cross ? '' : 'none';
+    if (!cross && pendingSwap && $('swapPortB') && $('swapPortA')) {
+      $('swapPortB').value = $('swapPortA').value;
+    }
+  }
+
+  function openSwapDialog(swap) {
+    pendingSwap = swap;
+    const isJump = swap.segment_type === 'jump';
+    const title = isJump ? '跳纤换芯' : '缆段换芯';
+    $('swapTitle').textContent = title;
+    $('swapSub').innerHTML =
+      `${esc(swap.label_a || swap.dev_a)} <strong>${esc(swap.port_a)}</strong>`
+      + ` → ${esc(swap.label_b || swap.dev_b)} <strong>${esc(swap.port_b)}</strong><br>`
+      + `<span style="color:var(--muted)">光路 ${esc(swap.cid)} · 选新纤芯后自动重建路径</span>`;
+    $('swapLabelA').textContent = (swap.label_a || 'A 端') + ' 纤芯';
+    $('swapLabelB').textContent = (swap.label_b || 'B 端') + ' 纤芯';
+    fillFiberSelect($('swapPortA'), swap.port_a);
+    fillFiberSelect($('swapPortB'), swap.port_b);
+    if ($('swapCrossFiber')) {
+      $('swapCrossFiber').checked = swap.port_a !== swap.port_b;
+    }
+    updateSwapCrossUi();
+    $('swapOverlay').classList.add('show');
+    $('swapOverlay').setAttribute('aria-hidden', 'false');
+  }
+
+  function closeSwapDialog() {
+    pendingSwap = null;
+    $('swapOverlay').classList.remove('show');
+    $('swapOverlay').setAttribute('aria-hidden', 'true');
+  }
+
+  async function autoJumpSwap(swap) {
+    let preview;
+    try {
+      preview = await apiPost({
+        action: 'swap_segment',
+        cid: swap.cid,
+        segment_index: swap.segment_index,
+        auto: true,
+        dry_run: true,
+        path_id: swap.path_id || null,
+        site: currentSite,
+        room: currentRoom,
+      });
+    } catch (err) {
+      showToast(false, err.message);
+      return;
+    }
+    const portA = preview.port_a;
+    const portB = preview.port_b;
+    const crossNote = portA !== portB ? `（异纤 ${portA}→${portB}）` : '';
+    const msg = `${preview.message || `自动跳纤换芯：${swap.port_a}↔${swap.port_b} → ${portA}↔${portB}${crossNote}`}\n\n确认后自动重建路径。`;
+    if (!confirm(msg)) return;
+    startSubmitBusy('正在跳纤换芯…', {
+      steps: SWAP_BUSY_STEPS,
+      hint: '换芯后会重建光路，请稍候',
+    });
+    try {
+      const d = await apiPost({
+        action: 'swap_segment',
+        cid: swap.cid,
+        segment_index: swap.segment_index,
+        auto: true,
+        port_a: portA,
+        port_b: portB,
+        path_id: swap.path_id || null,
+        site: currentSite,
+        room: currentRoom,
+      });
+      setSubmitBusyStep('换芯成功，正在刷新占用…');
+      if (selectedPort) {
+        await loadPortDetail(selectedPort, modalGeneration);
+      }
+      if (currentSite && currentRoom) await loadRoomPanelOccupancy(currentSite, currentRoom, true);
+      stopSubmitBusy();
+      showToast(true, d.message || '跳纤换芯完成');
+    } catch (err) {
+      stopSubmitBusy();
+      showToast(false, err.message);
+    }
+  }
+
+  async function confirmSwap() {
+    if (!pendingSwap) return;
+    const portA = $('swapPortA').value;
+    let portB = $('swapPortB').value;
+    if (!$('swapCrossFiber').checked) portB = portA;
+    if (!portA || !portB) {
+      showToast(false, '请选择纤芯');
+      return;
+    }
+    const same = portA === pendingSwap.port_a && portB === pendingSwap.port_b;
+    if (same) {
+      showToast(false, '新纤芯与当前相同');
+      return;
+    }
+    const crossNote = portA !== portB ? `（异纤 ${portA}→${portB}）` : '';
+    const msg = `将 ${pendingSwap.port_a}↔${pendingSwap.port_b} 换为 ${portA}↔${portB}${crossNote}，并重建 NetBox 路径。\n\n确认换芯？`;
+    if (!confirm(msg)) return;
+    startSubmitBusy('正在换芯…', {
+      button: $('swapConfirm'),
+      buttonText: '换芯中…',
+      steps: SWAP_BUSY_STEPS,
+      hint: '换芯后会重建光路，请稍候',
+    });
+    try {
+      const d = await apiPost({
+        action: 'swap_segment',
+        cid: pendingSwap.cid,
+        segment_index: pendingSwap.segment_index,
+        port_a: portA,
+        port_b: portB,
+        path_id: pendingSwap.path_id || null,
+        site: currentSite,
+        room: currentRoom,
+      });
+      closeSwapDialog();
+      setSubmitBusyStep('换芯成功，正在刷新占用…');
+      if (selectedPort) {
+        await loadPortDetail(selectedPort, modalGeneration);
+      }
+      if (currentSite && currentRoom) await loadRoomPanelOccupancy(currentSite, currentRoom, true);
+      stopSubmitBusy();
+      showToast(true, d.message || '换芯完成');
+    } catch (err) {
+      stopSubmitBusy();
+      showToast(false, err.message);
+    }
+  }
+
+  function renderDetailPanel(data) {
+    traceSwapRegistry.clear();
+    const releaseBar = $('releaseActions');
+    if (!data || !data.in_use || !data.circuits || !data.circuits.length) {
+      $('detailContent').innerHTML = '<div class="empty-hint" style="padding:20px">该端口暂无业务占用</div>';
+      if (releaseBar) releaseBar.classList.remove('show');
+      return;
+    }
+    if (releaseBar) releaseBar.classList.add('show');
+    let html = '';
+    if (data.local_segment) {
+      html += `<div class="readonly-box"><div class="lbl">本框本段（仅当前机房）</div>
+        ${esc(data.local_segment.cable)} · ${esc(data.local_segment.summary)}</div>`;
+    }
+    data.circuits.forEach((c) => {
+      const status = c.pending ? '登记中' : (c.is_complete ? '路径完整 ✓' : '路径未完整');
+      const hasTrace = !!(c.trace_timeline && c.trace_timeline.length);
+      const cidSafe = esc(c.cid || '');
+      html += `<div class="detail-box" data-cid="${cidSafe}"><h4>${esc(c.cid || c.name)}</h4>`;
+      html += '<div class="detail-grid">';
+      html += `<div class="detail-stat"><div class="lbl">业务名称</div>
+        <div class="detail-name-row">
+          <div class="val" data-role="biz-name">${esc(c.name || '')}</div>
+          <button type="button" class="btn-rename" data-action="rename-circuit"
+            data-cid="${cidSafe}" data-name="${esc(c.name || '')}">改名称</button>
+        </div></div>`;
+      html += `<div class="detail-stat"><div class="lbl">状态</div><div class="val">${status}</div></div>`;
+      if (c.ip) html += `<div class="detail-stat"><div class="lbl">业务 IP</div><div class="val">${esc(c.ip)}</div></div>`;
+      if (c.local_segment) {
+        html += `<div class="detail-stat"><div class="lbl">本段路由</div><div class="val" style="font-size:.72rem">${esc(c.local_segment.summary)}</div></div>`;
+      }
+      if (c.total_loss_db || c.actual_loss_db) {
+        const wl = c.wavelength_nm ? ` · ${c.wavelength_nm}nm` : '';
+        html += `<div class="detail-stat"><div class="lbl">全链路光损</div><div class="val">${esc(c.total_loss_db || c.actual_loss_db)} dB${wl}</div></div>`;
+      }
+      if (data.local && data.local.summary) {
+        html += `<div class="detail-stat"><div class="lbl">Front 延伸</div><div class="val" style="font-size:.72rem">${esc(data.local.summary)}</div></div>`;
+      }
+      html += '</div>';
+      if (hasTrace) {
+        html += renderTraceTimeline(c.trace_timeline);
+      } else {
+        const hops = c.local_hops || [];
+        if (hops.length) {
+          html += '<div style="margin-top:4px;font-size:.72rem;color:var(--muted)">本机房跳接/换缆</div><ol class="trace-list">';
+          hops.forEach(h => { html += '<li>' + esc(h) + '</li>'; });
+          html += '</ol>';
+        }
+        if (c.full_route) {
+          html += `<div class="detail-row" style="margin-top:8px"><span class="k">全程参考</span><span class="v" style="font-size:.72rem">${esc(c.full_route)}</span></div>`;
+        }
+      }
+      html += '</div>';
+    });
+    $('detailContent').innerHTML = html;
+    $('detailContent').querySelectorAll('[data-action="rename-circuit"]').forEach(btn => {
+      btn.onclick = () => renameCircuitBusinessName(btn.dataset.cid || '', btn.dataset.name || '');
+    });
+  }
+
+  async function renameCircuitBusinessName(cid, currentName) {
+    cid = (cid || '').trim();
+    if (!cid) {
+      showToast(false, '缺少光路编号');
+      return;
+    }
+    const next = prompt('修改业务名称（光路编号 ' + cid + ' 不变）', currentName || '');
+    if (next == null) return;
+    const name = String(next).trim();
+    if (!name) {
+      showToast(false, '业务名称不能为空');
+      return;
+    }
+    if (name === (currentName || '').trim()) {
+      showToast(true, '名称未变化');
+      return;
+    }
+    try {
+      startSubmitBusy('正在修改业务名称…', { hint: '正在写入 NetBox' });
+      const d = await apiPost({
+        action: 'rename_circuit',
+        cid,
+        business_name: name,
+        odf: currentOdf || (selectedPort && selectedPort.odf) || '',
+        cable: (selectedPort && selectedPort.cable) || currentCable || '',
+        fiber: (selectedPort && selectedPort.fiber) || '',
+        site: currentSite || '',
+        room: currentRoom || '',
+      });
+      setSubmitBusyStep('已改名，正在刷新…');
+      if (selectedPort) {
+        await loadPortDetail(selectedPort, modalGeneration);
+      }
+      if (currentSite && currentRoom) {
+        await loadRoomPanelOccupancy(currentSite, currentRoom, true);
+      }
+      stopSubmitBusy();
+      showToast(true, d.message || '已改名');
+    } catch (err) {
+      stopSubmitBusy();
+      showToast(false, err.message || err);
+    }
+  }
+
+  let modalGeneration = 0;
+
+  async function loadPortDetail(port, gen) {
+    gen = gen ?? modalGeneration;
+    $('detailContent').innerHTML = '<div class="empty-hint" style="padding:20px">加载业务信息…</div>';
+    port = mergeSelectedPort(port);
+    const odf = port.odf || currentOdf || '';
+    const fiber = port.fiber || '';
+    const cable = port.cable || currentCable || '';
+    if (!odf || !fiber) {
+      $('detailContent').innerHTML = '<div class="empty-hint" style="padding:20px">加载失败：端口信息不完整，请关闭后重新点开该端口</div>';
+      return null;
+    }
+    const q = new URLSearchParams({ odf, cable, fiber });
+    if (port.fp_id) q.set('fp_id', port.fp_id);
+    try {
+      const data = await apiGet('/port-detail?' + q.toString());
+      if (gen !== modalGeneration) return null;
+      renderDetailPanel(data);
+      return data;
+    } catch (e) {
+      if (gen !== modalGeneration) return null;
+      $('detailContent').innerHTML = '<div class="empty-hint" style="padding:20px">加载失败：' + esc(e.message) + '</div>';
+      return null;
+    }
+  }
+
+  function switchTab(tab) {
+    document.querySelectorAll('#modalTabs button').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === tab);
+    });
+    ['detailPanel', 'lossForm', 'bizForm'].forEach(id => {
+      const el = $(id);
+      if (!el) return;
+      const isDetail = id === 'detailPanel';
+      el.classList.toggle('active', (tab === 'detail' && isDetail) || (tab === 'loss' && id === 'lossForm') || (tab === 'biz' && id === 'bizForm'));
+    });
+  }
+
+  function fillSelect(el, items, placeholder, valKey, labelFn) {
+    if (!el) return;
+    el.innerHTML = '';
+    if (placeholder) el.append(new Option(placeholder, ''));
+    (items || []).forEach(it => {
+      if (it == null || it === '') return;
+      let v;
+      if (typeof it === 'string' || typeof it === 'number') {
+        v = String(it);
+      } else if (valKey == null) {
+        v = it.value != null ? String(it.value) : String(it);
+      } else {
+        v = it[valKey];
+      }
+      if (v == null || v === '') return;
+      el.append(new Option(labelFn ? labelFn(it) : v, v));
+    });
+  }
+
+  function findRoom(site, room) {
+    const s = tree.sites.find(x => x.name === site);
+    return s && s.rooms.find(x => x.name === room);
+  }
+
+  function findRoute(site, room, routeKey) {
+    const rm = findRoom(site, room);
+    return rm && (rm.odfs || []).find(o => (o.route_key || o.name) === routeKey);
+  }
+
+  async function loadOdfPanel(odf, cable, opts) {
+    opts = opts || {};
+    let url = '/odf-panel?odf=' + encodeURIComponent(odf);
+    if (cable) url += '&cable=' + encodeURIComponent(cable);
+    if (opts.modal) url += '&modal=1';
+    panel = await apiGet(url);
+    currentDisplayName = panel.display_name || odf;
+    return panel;
+  }
+
+  async function loadModalContext(odf, cable) {
+    if (panel && panel.has_context !== false) return panel;
+    let url = '/context?odf=' + encodeURIComponent(odf);
+    if (cable) url += '&cable=' + encodeURIComponent(cable);
+    const ctx = await apiGet(url);
+    panel = Object.assign({}, panel || {}, ctx, { has_context: true });
+    return panel;
+  }
+
+  function mergeCircuitOptions(port) {
+    let opts = (panel && panel.circuit_options) ? panel.circuit_options.slice() : [];
+    if (!opts.length && panel) {
+      const fallback = (panel.pending_circuits || []).concat(panel.existing_circuits || []);
+      opts = fallback.map(x => ({ cid: x.cid, name: x.name || x.cid, pending: !x.id }));
+    }
+    const seen = new Set(opts.map(o => o.cid));
+    if (port && port.cid && !seen.has(port.cid)) {
+      opts.unshift({ cid: port.cid, name: port.cid });
+    }
+    return opts;
+  }
+
+  function jumpTargetOptions() {
+    let opts = panel.jump_target_options || panel.local_odf_options || [];
+    if (!opts.length && roomRoutes.length && currentOdf) {
+      const cur = currentCable || (selectedPort && selectedPort.cable) || '';
+      opts = roomRoutes.filter(r => r.odf === currentOdf && r.route_key && (r.cable_filter || '') !== cur).map(r => ({
+        name: r.odf,
+        jump_odf: r.odf,
+        jump_cable: r.cable_filter || '',
+        display_name: r.display_name || r.odf,
+        route_key: r.route_key,
+        same_frame: true,
+        same_room: true,
+      }));
+    }
+    return opts;
+  }
+
+  function resolveJumpTarget(routeKey) {
+    const opt = jumpTargetOptions().find(o => o.route_key === routeKey);
+    if (opt) return { odf: opt.jump_odf || opt.name, cable: opt.jump_cable || '' };
+    return parseRouteValue(routeKey);
+  }
+
+  function deviceOptions() {
+    const room = panel.room_devices || [];
+    const site = panel.site_devices || [];
+    const seen = new Set();
+    const out = [];
+    room.forEach(d => { if (!seen.has(d.name)) { seen.add(d.name); out.push({ ...d, in_room: true }); } });
+    site.forEach(d => { if (!seen.has(d.name)) { seen.add(d.name); out.push({ ...d, in_room: false }); } });
+    return out;
+  }
+
+  function updateBizModeUi() {
+    const isNew = $('bizMode').value === 'new';
+    $('bizNewBlock').style.display = isNew ? 'block' : 'none';
+    $('bizContBlock').style.display = isNew ? 'none' : 'block';
+  }
+
+  function updateBizGuide(port) {
+    const room = currentRoom || panel.room || '本机房';
+    let html = '';
+    if (port.in_use) {
+      html = `<strong>本端口已在光路中</strong>（${esc(port.cid)}）。<br>`
+        + `· <strong>中间节点</strong>（如白灰窑换缆）：选「续接已有」→「跳纤到其他缆段/ODF框」→ 选目标路由与纤芯（可 1-1→1-3）<br>`
+        + `· <strong>终点机房</strong>：选「续接已有」→「直连交换机/光模块」→ 选 ${esc(room)} 光口<br>`
+        + `· <strong>登记下一段缆</strong>：换到对端路由视图，选空闲纤芯 +「仅登记缆段」`;
+      if (port.local) html += `<br>Front 侧：${esc(port.local)}`;
+    } else {
+      html = `<strong>新建端到端光路（4 步示例）</strong><br>`
+        + `① <strong>起点</strong>（如轧钢）：空闲端口 →「新建光路」→ 直连光收发 → 提交<br>`
+        + `② <strong>中间换缆</strong>（如白灰窑轧钢侧 1-1）：「续接已有」→ 跳纤到烧结侧路由 → 目标纤芯 1-3<br>`
+        + `③ <strong>下一段缆</strong>（白灰窑烧结侧 1-3）：「续接已有」→ 仅登记缆段 → 提交<br>`
+        + `④ <strong>终点</strong>（如烧结 1-3）：「续接已有」→ 直连光收发 → 提交后应可追踪`;
+    }
+    $('bizGuide').innerHTML = html;
+  }
+
+  async function fibersForOdfCable(odf, cable, fallbackFiber) {
+    if (!odf || !cable) return fallbackFiber ? [fallbackFiber] : [];
+    try {
+      const data = await apiGet('/odf-panel?odf=' + encodeURIComponent(odf) + '&cable=' + encodeURIComponent(cable));
+      const fromSec = (data.cables || []).flatMap(s => (s.ports || []).map(p => p.fiber));
+      const rows = sortFibers(fromSec.length ? fromSec : (data.fibers || []));
+      if (rows.length) return rows;
+    } catch (e) { /* keep fallback */ }
+    return fallbackFiber ? [fallbackFiber] : [];
+  }
+
+  function updateJumpHint(tgt, opt) {
+    const el = $('jumpHint');
+    if (!el || !tgt || !tgt.cable) return;
+    const crossCable = tgt.cable !== currentCable && tgt.odf === currentOdf;
+    if (crossCable) {
+      el.innerHTML = '同框<strong>换缆</strong>跳纤：本端与目标可不同纤芯（如 1-1→1-3），提交后自动刷新虚拟光路。';
+    } else if (opt && opt.same_frame) {
+      el.innerHTML = '同缆段跳纤：两端须用<strong>相同纤芯号</strong>（如 1-1 接 1-1）。';
+    } else {
+      el.innerHTML = '跨框跳纤：通常使用相同纤芯号，提交后自动刷新虚拟光路。';
+    }
+  }
+
+  function sortFibers(fibers) {
+    return [...new Set((fibers || []).filter(Boolean))].sort((a, b) => {
+      const pa = String(a).split('-').map(Number);
+      const pb = String(b).split('-').map(Number);
+      return (pa[0] - pb[0]) || (pa[1] - pb[1]);
+    });
+  }
+
+  function fibersForCable(cable, fallbackFiber) {
+    const section = (panel && panel.cables || []).find(s => s.cable === cable);
+    if (section && section.ports && section.ports.length) {
+      const rows = sortFibers(section.ports.map(p => p.fiber));
+      if (rows.length) return rows;
+    }
+    const base = panel && panel.fibers ? sortFibers(panel.fibers) : [];
+    return base.length ? base : (fallbackFiber ? [fallbackFiber] : []);
+  }
+
+  function setupBizForm(port, options) {
+    options = options || {};
+    const formKey = [port.fp_id || port.id || '', port.fiber, port.cable, currentOdf].join('|');
+    const resetLocal = options.resetLocalType ?? (bizFormInitKey !== formKey);
+    bizFormInitKey = formKey;
+    const savedLocalType = resetLocal ? 'trunk_only' : ($('bizLocalType').value || 'trunk_only');
+    const savedJumpOdf = !resetLocal ? ($('bizJumpOdf').value || '') : '';
+    const savedJumpFiber = !resetLocal ? ($('bizJumpFiber').value || '') : '';
+
+    updateBizGuide(port);
+    const isUsed = port.in_use;
+    $('bizMode').value = isUsed ? 'continue' : 'new';
+    $('bizMode').querySelector('option[value="new"]').disabled = isUsed;
+    updateBizModeUi();
+
+    const circuits = mergeCircuitOptions(port);
+    fillSelect($('bizCid'), circuits, circuits.length ? '请选择' : '（暂无，请用新建光路）', 'cid', c => c.cid + (c.pending ? ' · 登记中' : ''));
+    if (isUsed && port.cid) $('bizCid').value = port.cid;
+
+    const fiberOpts = fibersForCable(port.cable || currentCable, port.fiber);
+    fillSelect($('bizPortLocal'), fiberOpts, '', null, null);
+    fillSelect($('bizPortPeer'), fiberOpts, '', null, null);
+    $('bizPortLocal').value = port.fiber;
+    $('bizPortPeer').value = port.fiber;
+    if (isUsed) {
+      $('bizPortLocal').disabled = true;
+      $('bizPortPeer').disabled = true;
+    } else {
+      $('bizPortLocal').disabled = false;
+      $('bizPortPeer').disabled = false;
+    }
+    // disabled 字段不会进入 FormData，用 hidden 保留提交值
+    let hidLocal = $('bizPortLocalHidden');
+    if (!hidLocal) {
+      hidLocal = document.createElement('input');
+      hidLocal.type = 'hidden';
+      hidLocal.id = 'bizPortLocalHidden';
+      hidLocal.name = 'port_local';
+      $('bizPortLocal').insertAdjacentElement('afterend', hidLocal);
+    }
+    let hidPeer = $('bizPortPeerHidden');
+    if (!hidPeer) {
+      hidPeer = document.createElement('input');
+      hidPeer.type = 'hidden';
+      hidPeer.id = 'bizPortPeerHidden';
+      hidPeer.name = 'port_peer';
+      $('bizPortPeer').insertAdjacentElement('afterend', hidPeer);
+    }
+    if (isUsed) {
+      hidLocal.value = port.fiber;
+      hidPeer.value = port.fiber;
+      $('bizPortLocal').removeAttribute('name');
+      $('bizPortPeer').removeAttribute('name');
+    } else {
+      hidLocal.value = '';
+      hidPeer.value = '';
+      hidLocal.removeAttribute('name');
+      hidPeer.removeAttribute('name');
+      $('bizPortLocal').setAttribute('name', 'port_local');
+      $('bizPortPeer').setAttribute('name', 'port_peer');
+    }
+
+    fillSelect($('bizJumpOdf'), jumpTargetOptions(), '请选择', 'route_key',
+      o => (o.same_frame ? '同框 · ' : '★ ') + (o.display_name || o.name));
+    if (savedJumpOdf) $('bizJumpOdf').value = savedJumpOdf;
+    fillSelect($('bizJumpFiber'), fiberOpts, '', null, null);
+    $('bizJumpFiber').value = savedJumpFiber || port.fiber;
+
+    $('bizJumpOdf').onchange = async () => {
+      const rk = $('bizJumpOdf').value;
+      const tgt = resolveJumpTarget(rk);
+      const opt = jumpTargetOptions().find(o => o.route_key === rk);
+      const localFiber = $('bizPortLocal').value || port.fiber;
+      let fibers = await fibersForOdfCable(tgt.odf, tgt.cable, localFiber);
+      if (!fibers.length) fibers = fibersForCable(tgt.cable, localFiber);
+      fillSelect($('bizJumpFiber'), fibers.length ? fibers : fiberOpts, '', null, null);
+      const crossCable = tgt.cable && tgt.cable !== currentCable && tgt.odf === currentOdf;
+      if (crossCable && fibers.length > 1) {
+        const alt = fibers.find(f => f !== localFiber);
+        $('bizJumpFiber').value = alt || fibers[0];
+      } else if (opt && opt.same_frame) {
+        $('bizJumpFiber').value = localFiber;
+      }
+      updateJumpHint(tgt, opt);
+    };
+
+    const devs = deviceOptions();
+    fillSelect($('bizDevice'), devs, devs.length ? '请选择设备' : '（本机房暂无设备）', 'name',
+      d => (d.in_room ? '★ ' : '') + d.name + (d.role ? ' · ' + d.role : ''));
+    $('deviceEmptyHint').style.display = devs.length ? 'none' : 'block';
+    $('deviceEmptyHint').textContent = 'NetBox 中尚未创建 ' + (currentRoom || '本机房') + ' 的交换机/光模块。请先在 NetBox DCIM 添加设备（如 ' + (currentRoom || '机房') + '-SW01）及光口，再回来选择。';
+    fillSelect($('bizDevicePort'), [], '请先选设备');
+    if ($('bizDevice').value) loadDeviceIfaces($('bizDevice').value);
+
+    buildLocalTypeCards();
+    $('bizLocalType').value = savedLocalType;
+    document.querySelectorAll('input[name=local_type_pick]').forEach(inp => {
+      inp.checked = inp.value === savedLocalType;
+    });
+    updateLocalBlocks();
+    if ($('bizJumpOdf').value) $('bizJumpOdf').onchange();
+  }
+
+  function buildLocalTypeCards() {
+    const types = panel.local_types || [
+      {value:'trunk_only', label:'仅登记缆段', desc:'中间节点，本端口 Front 侧暂无跳纤/设备'},
+      {value:'jump_odf', label:'跳纤到其他缆段/ODF框', desc:'同框换缆（1-1→1-3）或跨框跳纤'},
+      {value:'to_device', label:'直连交换机/光模块', desc:'业务在此终结或起始于设备光口'}
+    ];
+    $('localTypeCards').innerHTML = types.map(t => `
+      <label class="radio-card">
+        <input type="radio" name="local_type_pick" value="${t.value}" ${t.value==='trunk_only'?'checked':''}>
+        <div class="t">${t.label}</div>
+        <div class="d">${t.desc || ''}</div>
+      </label>`).join('');
+    document.querySelectorAll('input[name=local_type_pick]').forEach(inp => {
+      inp.onchange = () => { $('bizLocalType').value = inp.value; updateLocalBlocks(); };
+    });
+  }
+
+  function updateLocalBlocks() {
+    const t = $('bizLocalType').value;
+    $('jumpBlock').classList.toggle('show', t === 'jump_odf');
+    $('deviceBlock').classList.toggle('show', t === 'to_device');
+  }
+
+  async function loadDeviceIfaces(device) {
+    $('bizDevicePort').innerHTML = '<option>加载中…</option>';
+    if (!device) { fillSelect($('bizDevicePort'), [], '请选择设备'); return; }
+    try {
+      const d = await apiGet('/device-interfaces?device=' + encodeURIComponent(device));
+      fillSelect($('bizDevicePort'), d.interfaces || [], '请选择光口', 'name', i => i.name + (i.type ? ' (' + i.type + ')' : ''));
+    } catch (e) {
+      fillSelect($('bizDevicePort'), [], '加载失败');
+    }
+  }
+
+  async function loadTree(opts) {
+    const refresh = !!(opts && opts.refresh);
+    const silent = !!(opts && opts.silent);
+    const keepSite = (opts && opts.keepSite) || $('selSite').value;
+    const keepRoom = (opts && opts.keepRoom) || $('selRoom').value;
+    if (!silent) {
+      $('selSite').disabled = true;
+      $('selRoom').disabled = true;
+      fillSelect($('selSite'), [], '加载厂区…');
+      $('panelArea').innerHTML = '<div class="empty-hint">正在加载厂区数据…</div>';
+    }
+    const url = '/tree' + (refresh ? '?refresh=1' : '');
+    tree = await apiGet(url);
+    if (!Array.isArray(tree.sites) || !tree.sites.length) {
+      throw new Error('未找到任何 ODF 设备，请检查 NetBox 站点/设备配置');
+    }
+    fillSelect($('selSite'), tree.sites, '请选择厂区', 'name', x => x.name);
+    $('selSite').disabled = false;
+    if (!silent) $('panelArea').innerHTML = '<div class="empty-hint">请选择厂区</div>';
+    if (keepSite && tree.sites.some(s => s.name === keepSite)) {
+      $('selSite').value = keepSite;
+      onSiteChange(true);
+      if (keepRoom) {
+        const site = tree.sites.find(s => s.name === keepSite);
+        if (site && site.rooms.some(r => r.name === keepRoom)) {
+          $('selRoom').value = keepRoom;
+          await onRoomChange(false);
+          return;
+        }
+      }
+      return;
+    }
+    if (silent) return;
+    const qs = new URLSearchParams(location.search);
+    const preSite = qs.get('site');
+    const preRoom = qs.get('room');
+    const preRoute = qs.get('route');
+    if (preSite && preRoom) {
+      $('selSite').value = preSite;
+      onSiteChange(true);
+      $('selRoom').value = preRoom;
+      await onRoomChange(false);
+      return;
+    }
+    if (!preRoute) return;
+    for (const s of tree.sites) {
+      for (const rm of s.rooms) {
+        for (const o of (rm.odfs || [])) {
+          const match = o.route_key === preRoute || (o.name + '|' + (o.cable || '')) === preRoute;
+          if (match) {
+            $('selSite').value = s.name;
+            onSiteChange(true);
+            $('selRoom').value = rm.name;
+            await onRoomChange(false);
+            return;
+          }
+        }
+      }
+    }
+  }
+
+  function onSiteChange(preservePanel) {
+    if (!preservePanel) stopNetboxSyncTimer();
+    const site = $('selSite').value;
+    currentSite = site;
+    $('selRoom').disabled = !site;
+    fillSelect($('selRoom'), site ? tree.sites.find(s=>s.name===site).rooms : [], '请选择机房', 'name');
+    if (preservePanel) return;
+    currentRoom = ''; currentOdf = ''; currentCable = ''; currentDisplayName = '';
+    roomRoutes = []; roomOrder = [];
+    $('panelArea').innerHTML = '<div class="empty-hint">请选择机房</div>';
+  }
+
+  const NETBOX_SYNC = {
+    tickMs: 2 * 60 * 1000,
+    roomMs: 10 * 60 * 1000,
+    treeMs: 15 * 60 * 1000,
+    lastRoom: 0,
+    lastTree: 0,
+    lastOk: 0,
+    running: false,
+    timer: null,
+  };
+  const HEADER_SYNC = {
+    tick: null,
+    poll: null,
+    hide: null,
+    started: 0,
+    floor: 0,
+    pct: 0,
+    label: '',
+  };
+
+  function formatSyncTime(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  function formatCacheHint(meta) {
+    if (!meta || !meta.cached) return '';
+    const ageMin = Math.max(1, Math.round((meta.age_sec || 0) / 60));
+    if (meta.stale) return ' · 缓存 ' + ageMin + ' 分钟（后台更新中）';
+    return ' · 缓存 ' + ageMin + ' 分钟';
+  }
+
+  function setSyncStatus(text, syncing) {
+    // 现场页不再展示缓存/同步状态；NetBox 同步只保留在审计页。
+  }
+
+  function renderHeaderSyncProgress(pct, label, state) {
+    const box = $('syncProgress');
+    const fill = $('syncProgressFill');
+    const lab = $('syncProgressLabel');
+    const pctEl = $('syncProgressPct');
+    if (!box) return;
+    const n = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+    HEADER_SYNC.pct = n;
+    if (label) HEADER_SYNC.label = label;
+    if (lab) lab.textContent = HEADER_SYNC.label || '正在同步';
+    if (pctEl) pctEl.textContent = n + '%';
+    if (fill) fill.style.width = n + '%';
+    box.classList.toggle('show', state !== 'idle');
+    box.classList.toggle('done', state === 'done');
+    box.classList.toggle('err', state === 'err');
+    box.setAttribute('aria-hidden', state === 'idle' ? 'true' : 'false');
+  }
+
+  function stopHeaderSyncTimers() {
+    if (HEADER_SYNC.tick) {
+      clearInterval(HEADER_SYNC.tick);
+      HEADER_SYNC.tick = null;
+    }
+    if (HEADER_SYNC.poll) {
+      clearInterval(HEADER_SYNC.poll);
+      HEADER_SYNC.poll = null;
+    }
+    if (HEADER_SYNC.hide) {
+      clearTimeout(HEADER_SYNC.hide);
+      HEADER_SYNC.hide = null;
+    }
+  }
+
+  function beginHeaderSyncProgress(label) {
+    const btn = $('btnSync');
+    stopHeaderSyncTimers();
+    HEADER_SYNC.started = Date.now();
+    HEADER_SYNC.floor = 8;
+    HEADER_SYNC.label = label || '正在从 NetBox 同步';
+    if (btn) {
+      btn.classList.add('syncing');
+      btn.disabled = true;
+    }
+    renderHeaderSyncProgress(HEADER_SYNC.floor, HEADER_SYNC.label, 'run');
+    HEADER_SYNC.tick = setInterval(() => {
+      const elapsed = (Date.now() - HEADER_SYNC.started) / 1000;
+      const eased = Math.round((1 - Math.exp(-elapsed / 9)) * 88);
+      const next = Math.max(HEADER_SYNC.floor, Math.min(92, eased));
+      if (next > HEADER_SYNC.pct) renderHeaderSyncProgress(next, HEADER_SYNC.label, 'run');
+    }, 400);
+    HEADER_SYNC.poll = setInterval(() => {
+      pollHeaderCacheProgress().catch(() => {});
+    }, 1000);
+    pollHeaderCacheProgress().catch(() => {});
+  }
+
+  function bumpHeaderSyncProgress(pct, label) {
+    HEADER_SYNC.floor = Math.max(HEADER_SYNC.floor, Math.round(Number(pct) || 0));
+    if (label) HEADER_SYNC.label = label;
+    renderHeaderSyncProgress(Math.max(HEADER_SYNC.pct, HEADER_SYNC.floor), HEADER_SYNC.label, 'run');
+  }
+
+  function endHeaderSyncProgress(ok, label) {
+    stopHeaderSyncTimers();
+    const btn = $('btnSync');
+    if (btn) {
+      btn.classList.remove('syncing');
+      btn.disabled = false;
+    }
+    renderHeaderSyncProgress(100, label || (ok ? '同步完成' : '同步失败'), ok ? 'done' : 'err');
+    HEADER_SYNC.hide = setTimeout(() => {
+      renderHeaderSyncProgress(0, '', 'idle');
+      HEADER_SYNC.hide = null;
+    }, ok ? 1400 : 2800);
+  }
+
+  async function pollHeaderCacheProgress() {
+    if (!NETBOX_SYNC.running) return;
+    const d = await apiGet('/cache/status?_t=' + Date.now());
+    const r = (d && d.refresh) || {};
+    if (!r.running) return;
+    const serverPct = Math.max(0, Math.min(99, Number(r.pct) || 0));
+    const label = r.label || HEADER_SYNC.label;
+    HEADER_SYNC.floor = Math.max(HEADER_SYNC.floor, serverPct);
+    renderHeaderSyncProgress(Math.max(HEADER_SYNC.pct, HEADER_SYNC.floor), label, 'run');
+  }
+
+  function stopNetboxSyncTimer() {
+    if (NETBOX_SYNC.timer) {
+      clearInterval(NETBOX_SYNC.timer);
+      NETBOX_SYNC.timer = null;
+    }
+  }
+
+  function startNetboxSyncTimer() {
+    stopNetboxSyncTimer();
+    NETBOX_SYNC.timer = setInterval(() => tickNetboxSync(false), NETBOX_SYNC.tickMs);
+  }
+
+  async function syncNetBox(opts) {
+    const forceTree = !!(opts && opts.tree);
+    const forceRoom = !!(opts && opts.full);
+    const forceOccupancy = !!(opts && (opts.occupancy ?? forceRoom));
+    const showBar = !!(opts && opts.progress) || forceOccupancy || forceRoom || forceTree;
+    if (NETBOX_SYNC.running) {
+      setSyncStatus('同步进行中，请稍候…', true);
+      return;
+    }
+    NETBOX_SYNC.running = true;
+    setSyncStatus('正在从 NetBox 同步…', true);
+    if (showBar) beginHeaderSyncProgress('正在从 NetBox 同步…');
+    try {
+      const now = Date.now();
+      const site = currentSite || $('selSite').value;
+      const room = currentRoom || $('selRoom').value;
+      if (site) currentSite = site;
+      if (room) currentRoom = room;
+      if (forceOccupancy && (!site || !room)) {
+        setSyncStatus('请先选择厂区与机房，再同步占用', false);
+        if (showBar) endHeaderSyncProgress(false, '请先选择机房');
+        return;
+      }
+      const modalOpen = $('modalBg').classList.contains('open');
+      const needTree = forceTree || now - NETBOX_SYNC.lastTree >= NETBOX_SYNC.treeMs;
+      const needRoom = site && room && (
+        forceOccupancy ||
+        (!modalOpen && (forceRoom || now - NETBOX_SYNC.lastRoom >= NETBOX_SYNC.roomMs))
+      );
+
+      if (needTree) {
+        if (showBar) bumpHeaderSyncProgress(18, '正在同步厂区目录…');
+        await loadTree({ refresh: true, silent: true, keepSite: currentSite, keepRoom: currentRoom });
+        NETBOX_SYNC.lastTree = Date.now();
+        if (showBar) bumpHeaderSyncProgress(32, '目录已更新');
+      }
+      if (needRoom) {
+        if (showBar) bumpHeaderSyncProgress(Math.max(HEADER_SYNC.floor, 36), '正在同步本机房占用…');
+        await loadRoomPanelOccupancy(site, room, forceOccupancy || forceRoom);
+        NETBOX_SYNC.lastRoom = Date.now();
+      }
+      NETBOX_SYNC.lastOk = Date.now();
+      const parts = [];
+      if (needRoom) parts.push('占用');
+      if (needTree) parts.push('目录');
+      const hint = parts.length ? (' · ' + parts.join('+') + '同步于 ' + formatSyncTime(NETBOX_SYNC.lastOk) + ' · 以 NetBox 为准') : '';
+      setSyncStatus('与 NetBox 保持同步' + hint, false);
+      if (showBar) endHeaderSyncProgress(true, parts.length ? ('已同步' + parts.join('+')) : '同步完成');
+    } catch (e) {
+      setSyncStatus('同步失败：' + (e.message || e) + ' · 点击 ↻ 重试', false);
+      console.warn('NetBox sync failed', e);
+      if (showBar) endHeaderSyncProgress(false, '同步失败');
+    } finally {
+      NETBOX_SYNC.running = false;
+      const btn = $('btnSync');
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function tickNetboxSync(fromVisible) {
+    if (document.hidden && !fromVisible) return;
+    const now = Date.now();
+    const staleRoom = now - NETBOX_SYNC.lastRoom >= NETBOX_SYNC.roomMs;
+    const staleTree = now - NETBOX_SYNC.lastTree >= NETBOX_SYNC.treeMs;
+    if (fromVisible && (staleRoom || staleTree)) {
+      await syncNetBox({ full: staleRoom });
+      return;
+    }
+    if (staleTree || (currentSite && currentRoom && staleRoom)) {
+      await syncNetBox({});
+    }
+  }
+
+  async function loadRoomPanelOccupancy(site, room, refresh) {
+    let url = '/room-panel?site=' + encodeURIComponent(site) + '&room=' + encodeURIComponent(room) + '&occupancy=1';
+    if (refresh) url += '&refresh=1';
+    const data = await apiGet(url);
+    if ($('selSite').value !== site || $('selRoom').value !== room) return data;
+    roomRoutes = data.routes || data.odfs || [];
+    roomOrder = data.route_order || roomRoutes.map(r => r.route_key).filter(Boolean);
+    renderRoomPanel(site, room, roomRoutes);
+    if (data._meta) {
+      const hint = formatCacheHint(data._meta);
+      const occ = data._meta.occupancy_loaded === false ? ' · 占用同步中' : '';
+      setSyncStatus('ODF 框已就绪' + (hint || '') + occ, false);
+    }
+    return data;
+  }
+
+  async function loadRoomPanel(mode) {
+    const site = $('selSite').value, room = $('selRoom').value;
+    if (!site || !room) return;
+    currentSite = site;
+    currentRoom = room;
+    const silent = mode === 'full' || mode === 'occupancy';
+    if (mode === 'occupancy' || mode === 'full') {
+      try {
+        await loadRoomPanelOccupancy(site, room, mode === 'full' || mode === 'occupancy');
+        history.replaceState(null, '', '?site=' + encodeURIComponent(site) + '&room=' + encodeURIComponent(room));
+        startNetboxSyncTimer();
+      } catch (e) {
+        if (!silent) {
+          $('panelArea').innerHTML = '<div class="empty-hint" style="color:#ffb74d">占用同步失败：' + esc(e.message) + '</div>';
+        }
+        throw e;
+      }
+      return;
+    }
+    if (!silent) $('panelArea').innerHTML = '<div class="empty-hint">加载机房 ODF 框…</div>';
+    try {
+      const url = '/room-panel?site=' + encodeURIComponent(site) + '&room=' + encodeURIComponent(room) + '&fast=1';
+      const data = await apiGet(url);
+      roomRoutes = data.routes || data.odfs || [];
+      roomOrder = data.route_order || roomRoutes.map(r => r.route_key).filter(Boolean);
+      renderRoomPanel(site, room, roomRoutes);
+      history.replaceState(null, '', '?site=' + encodeURIComponent(site) + '&room=' + encodeURIComponent(room));
+      startNetboxSyncTimer();
+      if (!silent) {
+        const hint = data._meta ? formatCacheHint(data._meta) : '';
+        setSyncStatus('ODF 框已显示 · 正在同步占用状态…' + (hint || ''), false);
+      }
+      loadRoomPanelOccupancy(site, room, false).catch(e => {
+        console.warn('occupancy sync failed', e);
+        setSyncStatus('占用同步失败：' + (e.message || e), false);
+      });
+    } catch (e) {
+      if (!silent) {
+        $('panelArea').innerHTML = '<div class="empty-hint" style="color:#ffb74d">加载失败：' + esc(e.message) + '<br><button type="button" class="btn" style="margin-top:12px" onclick="refreshPanel()">重试</button></div>';
+      }
+      throw e;
+    }
+  }
+
+  async function fetchPortStatus(el, refresh, timeoutMs) {
+    const fromEl = el ? portFromEl(el) : {};
+    const odf = fromEl.odf || (selectedPort && selectedPort.odf) || currentOdf || '';
+    const fiber = fromEl.fiber || (selectedPort && selectedPort.fiber) || '';
+    const cable = fromEl.cable || (selectedPort && selectedPort.cable) || currentCable || '';
+    const q = new URLSearchParams({ odf, cable, fiber });
+    const fpId = fromEl.fp_id || (el && el.dataset.fpId) || (selectedPort && selectedPort.fp_id) || '';
+    if (fpId) q.set('fp_id', fpId);
+    if (refresh) q.set('refresh', '1');
+    if (!odf || !fiber) throw new Error('端口信息不完整，请关闭后重新点开');
+    const ctrl = new AbortController();
+    const timer = timeoutMs ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+    try {
+      const r = await fetch(api + '/port-status?' + q.toString(), { signal: ctrl.signal });
+      const text = await r.text();
+      let d;
+      try { d = JSON.parse(text); } catch (e) {
+        throw new Error('接口返回异常（HTTP ' + r.status + '）');
+      }
+      if (!r.ok) throw new Error(d.error || r.statusText || ('HTTP ' + r.status));
+      return d;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  function cleanStr(v) {
+    const s = (v == null ? '' : String(v)).trim();
+    if (!s || s === 'undefined' || s === 'null' || s === 'None' || s === '—') return '';
+    return s;
+  }
+
+  function routeSectionForPort(port) {
+    const odf = cleanStr(port && port.odf) || currentOdf;
+    const cable = cleanStr(port && port.cable) || currentCable;
+    const route = roomRoutes.find(r => r.odf === odf && (
+      !cable || r.cable_filter === cable || (r.cables || []).some(c => c.cable === cable)
+    )) || roomRoutes.find(r => r.odf === odf) || null;
+    const secs = (route && route.cables) || [];
+    return secs.find(c => c.cable === cable) || secs[0] || null;
+  }
+
+  function resolvePeerOdf(port) {
+    const direct = cleanStr(port && port.peer);
+    if (direct) return direct;
+    const sec = routeSectionForPort(port);
+    return cleanStr(sec && (sec.peer_odf || sec.peer));
+  }
+
+  function fillBizRouteFields(port) {
+    const cable = cleanStr(port && port.cable) || currentCable;
+    const peer = resolvePeerOdf(port);
+    if (peer) mergeSelectedPort({ peer: peer, peer_display: (port && port.peer_display) || '' });
+    if ($('bizCable')) $('bizCable').value = cable;
+    if ($('bizPeer')) $('bizPeer').value = peer;
+    if ($('bizCableShow')) $('bizCableShow').textContent = cable || '—';
+    const peerLabel = cleanStr(port && port.peer_display) || peer || '（未解析，请检查缆线）';
+    if ($('bizPeerShow')) $('bizPeerShow').textContent = peerLabel;
+    if ($('lossCable')) $('lossCable').value = cable || '';
+    if ($('lossCableShow')) $('lossCableShow').textContent = cable || '—';
+    if ($('bizPeerShow')) {
+      if (peer && cleanStr(port && port.peer_display) && peer !== cleanStr(port && port.peer_display)) {
+        $('bizPeerShow').title = peer;
+      } else {
+        $('bizPeerShow').removeAttribute('title');
+      }
+    }
+    return peer;
+  }
+
+  function portFromEl(el) {
+    return {
+      odf: cleanStr(el.dataset.odf) || currentOdf,
+      fp_id: el.dataset.fpId || '',
+      cable: cleanStr(el.dataset.cable), fiber: cleanStr(el.dataset.fiber), peer: cleanStr(el.dataset.peer),
+      peer_display: cleanStr(el.dataset.peerDisplay),
+      name: el.dataset.name, loss_db: el.dataset.loss, local: el.dataset.local,
+      in_use: el.dataset.inUse === '1', cid: el.dataset.cid || ''
+    };
+  }
+
+  function mergeSelectedPort(extra) {
+    const prev = selectedPort || {};
+    const next = extra || {};
+    selectedPort = {
+      ...prev,
+      ...next,
+      odf: next.odf || prev.odf || currentOdf,
+      fiber: next.fiber || prev.fiber,
+      cable: next.cable || prev.cable || currentCable,
+      fp_id: next.fp_id || next.id || prev.fp_id || prev.id || '',
+      peer: cleanStr(next.peer) || cleanStr(prev.peer),
+      peer_display: cleanStr(next.peer_display) || cleanStr(prev.peer_display),
+    };
+    if (selectedPort.odf) currentOdf = selectedPort.odf;
+    if (selectedPort.cable) currentCable = selectedPort.cable;
+    return selectedPort;
+  }
+
+  function resolveModalPortEl(port) {
+    port = port || selectedPort;
+    const live = port && findPortCell(port);
+    if (live) {
+      modalPortEl = live;
+      return live;
+    }
+    if (modalPortEl && modalPortEl.isConnected) return modalPortEl;
+    return null;
+  }
+
+  function findPortCell(port) {
+    const area = $('panelArea');
+    if (!area || !port) return null;
+    const odf = port.odf || currentOdf;
+    for (const el of area.querySelectorAll('.port')) {
+      if (el.dataset.fiber === port.fiber && el.dataset.cable === port.cable && el.dataset.odf === odf) return el;
+    }
+    return null;
+  }
+
+  function updateModalHeader(port, routeMeta) {
+    const disp = routeMeta?.display_name || currentDisplayName || currentOdf;
+    $('modalTitle').textContent = port.fiber + ' · ' + disp;
+    let sub = port.in_use ? ('已用 · ' + (port.cid || '业务光路')) : (port.name ? ('端口 ' + port.name) : '空闲端口');
+    sub += ' · ' + port.cable;
+    $('modalSub').textContent = sub;
+    $('tabDetail').style.display = port.in_use ? '' : 'none';
+    $('tabBiz').style.display = port.in_use ? '' : '';
+  }
+
+  async function applyStatusToOpenModal(el, st, gen) {
+    if (gen !== modalGeneration || !st) return el;
+    const prevInUse = !!(selectedPort && selectedPort.in_use);
+    const live = resolveModalPortEl(selectedPort) || (el && el.isConnected ? el : null) || el;
+    el = applyPortStatusToCell(live, st) || live;
+    mergeSelectedPort(portFromEl(el));
+    const routeMeta = roomRoutes.find(r => r.odf === currentOdf && (!currentCable || r.cable_filter === currentCable));
+    updateModalHeader(selectedPort, routeMeta);
+    fillBizRouteFields(selectedPort);
+    const nowInUse = !!selectedPort.in_use;
+    if (prevInUse === nowInUse) {
+      modalPortEl = el;
+      return el;
+    }
+    if (nowInUse) {
+      switchTab('detail');
+      loadPortDetail(selectedPort, gen).catch(e => {
+        $('detailContent').innerHTML = '<div class="empty-hint" style="padding:20px">加载失败：' + esc(e.message) + '</div>';
+      });
+    } else {
+      switchTab('biz');
+      $('detailContent').innerHTML = '<div class="empty-hint" style="padding:20px">该端口暂无业务占用</div>';
+      loadModalContext(currentOdf, currentCable).then(() => setupBizForm(selectedPort, { resetLocalType: true })).catch(() => {});
+    }
+    modalPortEl = el;
+    return el;
+  }
+
+  async function syncModalPortStatus() {
+    const btn = $('btnPortSync');
+    let el = resolveModalPortEl(selectedPort);
+    if (!el) {
+      $('modalToast').className = 'toast err';
+      $('modalToast').textContent = '未找到对应端口格子';
+      return;
+    }
+    const gen = modalGeneration;
+    btn.disabled = true;
+    btn.classList.add('syncing');
+    startSubmitBusy('正在同步端口状态…', {
+      button: btn,
+      buttonText: '同步中…',
+      steps: PORT_SYNC_STEPS,
+      hint: '正在从 NetBox 核对当前端口',
+      longHint: '耗时较长属正常（正在核对占用）',
+    });
+    try {
+      const st = await fetchPortStatus(el, true, 45000);
+      if (gen !== modalGeneration) return;
+      setSubmitBusyStep('正在刷新端口显示…');
+      el = await applyStatusToOpenModal(el, st, gen) || el;
+      modalPortEl = el;
+      if (st.in_use && selectedPort) {
+        fillSelect($('lossCid'), mergeCircuitOptions(selectedPort), '（可选）', 'cid', c => c.cid);
+        setSubmitBusyStep('正在加载全程链路…');
+        await loadPortDetail(selectedPort, gen).catch(e => {
+          $('detailContent').innerHTML = '<div class="empty-hint" style="padding:20px">加载失败：' + esc(e.message) + '</div>';
+        });
+      }
+      if (gen !== modalGeneration) return;
+      $('modalToast').className = 'toast ok';
+      $('modalToast').textContent = st.in_use ? ('已同步：已用 · ' + (st.cid || '业务光路')) : '已同步：空闲';
+    } catch (e) {
+      if (gen !== modalGeneration) return;
+      $('modalToast').className = 'toast err';
+      $('modalToast').textContent = '同步失败：' + (e.message || e);
+    } finally {
+      stopSubmitBusy();
+      btn.disabled = false;
+      btn.classList.remove('syncing');
+    }
+  }
+
+  async function refreshPortOccupancy(el, gen) {
+    try {
+      await applyStatusToOpenModal(el, await fetchPortStatus(el, true, 45000), gen);
+    } catch (e) {
+      console.warn('端口占用状态刷新失败', e);
+    }
+  }
+
+  function applyPortStatusToCell(el, st) {
+    if (!el || !st) return;
+    el.dataset.inUse = st.in_use ? '1' : '';
+    el.dataset.cid = st.cid || '';
+    if (st.fp_id) el.dataset.fpId = String(st.fp_id);
+    el.classList.toggle('in-use', !!st.in_use);
+    if (st.in_use) el.classList.remove('empty');
+    const p = {
+      fiber: el.dataset.fiber,
+      id: el.dataset.fpId,
+      in_use: !!st.in_use,
+      cid: st.cid || '',
+      name: el.dataset.name,
+      loss_db: el.dataset.loss,
+      local_summary: el.dataset.local,
+      linked: el.classList.contains('linked'),
+      empty: !st.in_use && !el.classList.contains('linked') && !el.dataset.loss,
+    };
+    const sec = {
+      cable: el.dataset.cable,
+      peer_odf: el.dataset.peer,
+      peer_display_name: el.dataset.peerDisplay,
+    };
+    const repl = document.createElement('div');
+    repl.innerHTML = renderPortCell(p, sec, el.dataset.odf);
+    const fresh = repl.firstElementChild;
+    if (fresh) el.replaceWith(fresh);
+    return fresh || el;
+  }
+
+  function effectiveConnector(op) {
+    const raw = ((op && (op.connector_label || op.connector_type)) || '').trim();
+    const u = raw.toUpperCase();
+    if (raw.indexOf('大方') >= 0) return 'SC';
+    if (raw.indexOf('圆口') >= 0) return 'FC';
+    if (u === 'SC' || (u.indexOf('SC') >= 0 && u.indexOf('FC') < 0)) return 'SC';
+    if (u === 'FC' || u.indexOf('FC') >= 0) return 'FC';
+    return '';
+  }
+
+  function connectorLabel(op) {
+    const label = ((op && op.connector_label) || '').trim();
+    if (label) return label;
+    const c = effectiveConnector(op);
+    if (c === 'FC') return '圆口-FC';
+    if (c === 'SC') return '大方-SC';
+    return '';
+  }
+
+  function connBadgeHtml(op) {
+    const c = effectiveConnector(op) || 'SC';
+    const label = c === 'FC' ? '圆口-FC' : '大方-SC';
+    const cls = c === 'FC' ? 'conn-fc' : 'conn-sc';
+    const odf = op.odf || '';
+    return `<span class="conn-wrap">
+      <button type="button" class="conn-badge ${cls}" data-odf="${esc(odf)}" data-value="${c}" title="点击修改接口类型">${esc(label)}</button>
+      <span class="conn-menu">
+        <button type="button" data-value="SC"${c === 'SC' ? ' class="active"' : ''}>大方-SC</button>
+        <button type="button" data-value="FC"${c === 'FC' ? ' class="active"' : ''}>圆口-FC</button>
+      </span>
+    </span>`;
+  }
+
+  function renderRoomPanel(site, room, routes) {
+    if (!routes.length) {
+      $('panelArea').innerHTML = '<div class="empty-hint">该机房暂无 ODF 框</div>';
+      return;
+    }
+    let html = `<div class="odf-head"><h2>${esc(room)}</h2>
+      <div class="odf-meta">${esc(site)} · 共 ${routes.length} 个 ODF 框 · 拖拽标题栏 ⋮⋮ 调整机柜顺序（自动保存） · 占用状态后台同步</div></div>`;
+    html += '<div id="odfSortList">';
+    routes.forEach((op, idx) => {
+      const title = op.display_name || op.odf;
+      const rk = op.route_key || '';
+      const connBadge = connBadgeHtml(op);
+      html += `<div class="odf-block" data-route-key="${esc(rk)}" data-idx="${idx}">
+        <div class="odf-block-head"><span class="odf-drag" title="拖拽排序">⋮⋮</span>
+          <div style="flex:1;min-width:0"><div class="cable-title">${esc(title)}${connBadge}</div>
+          <div class="cable-sub">${esc(op.cable_filter || (op.cables[0] && op.cables[0].cable) || '')} → 对端 ${esc((op.cables[0] && (op.cables[0].peer_display_name || op.cables[0].peer_odf)) || '—')}
+            · <a href="${op.device_url}" target="_blank" onclick="event.stopPropagation()">NetBox</a></div></div></div>
+        <div class="odf-block-body">`;
+      if (!op.cables.length) {
+        html += '<div class="empty-hint" style="padding:16px">无缆段</div>';
+      } else {
+        op.cables.forEach(sec => {
+          html += '<div class="port-grid">';
+          sec.ports.forEach(p => { html += renderPortCell(p, sec, op.odf); });
+          html += '</div>';
+        });
+      }
+      html += '</div></div>';
+    });
+    html += '</div>';
+    $('panelArea').innerHTML = html;
+    bindPortClicks();
+    bindOdfSort();
+    bindConnectorSelects();
+  }
+
+  function applyConnectorClass(badge, code) {
+    badge.classList.toggle('conn-fc', code === 'FC');
+    badge.classList.toggle('conn-sc', code !== 'FC');
+    badge.dataset.value = code;
+    badge.textContent = code === 'FC' ? '圆口-FC' : '大方-SC';
+  }
+
+  function closeConnectorMenus(except) {
+    document.querySelectorAll('#odfSortList .conn-wrap.open').forEach(el => {
+      if (el !== except) el.classList.remove('open');
+    });
+  }
+
+  function bindConnectorSelects() {
+    document.querySelectorAll('#odfSortList .conn-wrap').forEach(wrap => {
+      const badge = wrap.querySelector('.conn-badge');
+      if (!badge) return;
+      wrap.addEventListener('pointerdown', e => e.stopPropagation());
+      wrap.addEventListener('click', e => e.stopPropagation());
+      badge.addEventListener('click', e => {
+        e.preventDefault();
+        const willOpen = !wrap.classList.contains('open');
+        closeConnectorMenus();
+        wrap.classList.toggle('open', willOpen);
+      });
+      wrap.querySelectorAll('.conn-menu button').forEach(btn => {
+        btn.addEventListener('click', async e => {
+          e.preventDefault();
+          const odf = badge.dataset.odf || '';
+          const connector = btn.dataset.value || '';
+          const prev = badge.dataset.value || 'SC';
+          wrap.classList.remove('open');
+          if (!odf || (connector !== 'FC' && connector !== 'SC') || connector === prev) return;
+          badge.disabled = true;
+          applyConnectorClass(badge, connector);
+          wrap.querySelectorAll('.conn-menu button').forEach(b => {
+            b.classList.toggle('active', b.dataset.value === connector);
+          });
+          try {
+            await apiPost({
+              action: 'set_connector',
+              odf,
+              connector,
+              site: currentSite || '',
+              room: currentRoom || ''
+            });
+          } catch (err) {
+            applyConnectorClass(badge, prev);
+            wrap.querySelectorAll('.conn-menu button').forEach(b => {
+              b.classList.toggle('active', b.dataset.value === prev);
+            });
+            alert(err.message || '修改接口标签失败');
+          } finally {
+            badge.disabled = false;
+          }
+        });
+      });
+    });
+    if (!document.body.dataset.connMenuBound) {
+      document.body.dataset.connMenuBound = '1';
+      document.addEventListener('click', () => closeConnectorMenus());
+    }
+  }
+
+  function bindOdfSort() {
+    document.querySelectorAll('.odf-block-head').forEach(head => {
+      head.addEventListener('pointerdown', e => {
+        if (e.target.closest('a, .conn-wrap, .conn-badge')) return;
+        e.preventDefault();
+        dragBlock = head.closest('.odf-block');
+        dragPointerId = e.pointerId;
+        dragBlock.classList.add('dragging');
+        head.setPointerCapture(e.pointerId);
+      });
+      head.addEventListener('pointermove', e => {
+        if (!dragBlock || dragPointerId !== e.pointerId) return;
+        document.querySelectorAll('.odf-block.drop-target').forEach(x => x.classList.remove('drop-target'));
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const target = el && el.closest ? el.closest('.odf-block') : null;
+        if (target && target !== dragBlock) target.classList.add('drop-target');
+      });
+      head.addEventListener('pointerup', async e => {
+        if (!dragBlock || dragPointerId !== e.pointerId) return;
+        document.querySelectorAll('.odf-block.drop-target').forEach(x => x.classList.remove('drop-target'));
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const target = el && el.closest ? el.closest('.odf-block') : null;
+        const list = $('odfSortList');
+        if (target && target !== dragBlock && list) {
+          const rect = target.getBoundingClientRect();
+          const before = e.clientY < rect.top + rect.height / 2;
+          list.insertBefore(dragBlock, before ? target : target.nextSibling);
+          await persistRoomOrder();
+        }
+        dragBlock.classList.remove('dragging');
+        dragBlock = null;
+        dragPointerId = null;
+      });
+      head.addEventListener('lostpointercapture', () => {
+        if (dragBlock) dragBlock.classList.remove('dragging');
+        document.querySelectorAll('.odf-block.drop-target').forEach(x => x.classList.remove('drop-target'));
+        dragBlock = null;
+        dragPointerId = null;
+      });
+    });
+  }
+
+  async function persistRoomOrder() {
+    const order = [...document.querySelectorAll('#odfSortList .odf-block')]
+      .map(el => el.dataset.routeKey).filter(Boolean);
+    if (!order.length || !currentSite || !currentRoom) return;
+    roomOrder = order;
+    try {
+      await apiPostOrder({ action: 'room_order', site: currentSite, room: currentRoom, order });
+    } catch (e) {
+      console.warn('保存排序失败', e);
+    }
+  }
+
+  function renderPortCell(p, sec, odfName) {
+    const jumped = !!(p.linked || p.has_jump);
+    const cls = ['port', p.in_use?'in-use':'', p.empty&&!p.in_use?'empty':'', jumped?'linked':'', p.loss_db?'has-loss':''].filter(Boolean).join(' ');
+    const label = p.in_use ? (p.cid || p.fiber || p.name || '已用') : (p.fiber || '空闲');
+    return `<div class="${cls}" data-odf="${esc(odfName)}" data-fp-id="${p.id||''}" data-cable="${esc(sec.cable)}" data-fiber="${esc(p.fiber)}" data-peer="${esc(sec.peer_odf||'')}" data-peer-display="${esc(sec.peer_display_name||'')}"
+      data-name="${esc(p.name||'')}" data-loss="${esc(p.loss_db||'')}" data-local="${esc(p.local_summary||'')}"
+      data-in-use="${p.in_use?'1':''}" data-cid="${esc(p.cid||'')}">
+      <div class="fiber">${p.fiber}</div>
+      ${p.in_use ? `<div class="badge-used">已用</div><div class="cid-tag">${p.cid||''}</div>` : ''}
+      <div class="name">${label}</div>
+      ${p.in_use && p.local_segment ? `<div class="local">${p.local_segment}</div>` : ''}
+      ${p.loss_db ? `<div class="loss">${p.loss_db}dB</div>` : ''}
+      ${!p.in_use && p.local_summary ? `<div class="local">${p.local_summary}</div>` : ''}
+    </div>`;
+  }
+
+  function bindPortClicks() {
+    const area = $('panelArea');
+    if (!area || area.dataset.portClickBound) return;
+    area.dataset.portClickBound = '1';
+    area.addEventListener('click', (e) => {
+      const el = e.target.closest('.port');
+      if (!el || !area.contains(el)) return;
+      e.preventDefault();
+      if (el.dataset.odf) currentOdf = el.dataset.odf;
+      openPortModal(el);
+    });
+  }
+
+  async function onRoomChange(preservePanel) {
+    currentRoom = $('selRoom').value;
+    if (!preservePanel) {
+      currentOdf = ''; currentCable = ''; currentDisplayName = '';
+    }
+    if ($('selRoom').value) {
+      await loadRoomPanel(false);
+      NETBOX_SYNC.lastRoom = Date.now();
+    } else {
+      stopNetboxSyncTimer();
+      $('panelArea').innerHTML = '<div class="empty-hint">请选择机房</div>';
+    }
+  }
+
+  async function refreshPanel() {
+    if (currentSite && currentRoom) {
+      await loadRoomPanelOccupancy(currentSite, currentRoom, true);
+    }
+  }
+
+  async function openPortModal(el) {
+    modalGeneration++;
+    const gen = modalGeneration;
+    bizFormInitKey = '';
+
+    if (el.dataset.odf) currentOdf = el.dataset.odf;
+    currentCable = el.dataset.cable || '';
+    modalPortEl = el;
+    selectedPort = mergeSelectedPort(portFromEl(el));
+
+    const routeMeta = roomRoutes.find(r => r.odf === currentOdf && (!currentCable || r.cable_filter === currentCable));
+    updateModalHeader(selectedPort, routeMeta);
+    fillBizRouteFields(selectedPort);
+
+    $('modalBg').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    $('modalToast').className = 'toast loading';
+    $('modalToast').textContent = '加载端口详情…';
+    $('detailContent').innerHTML = '<div class="empty-hint" style="padding:20px">加载业务信息…</div>';
+    acquireEditLock(selectedPort).catch(() => {});
+    // 先按格子缓存状态切页，随后强制向 NetBox 核对占用（避免 fast 面板未刷完时误显示空闲）
+    if (selectedPort.in_use) switchTab('detail');
+    else {
+      switchTab('biz');
+      if ($('releaseActions')) $('releaseActions').classList.remove('show');
+    }
+
+    try {
+      const panelP = loadOdfPanel(currentOdf, currentCable, { modal: true });
+      // 优先走缓存（~200ms）；强制 refresh=1 会全量扫路径约 8s，仅「同步端口状态」再用
+      let statusP = null;
+      try {
+        statusP = await fetchPortStatus(el, false, 15000);
+        if (gen !== modalGeneration) return;
+        el = await applyStatusToOpenModal(el, statusP, gen) || el;
+        modalPortEl = el;
+        mergeSelectedPort(portFromEl(el));
+        updateModalHeader(selectedPort, routeMeta);
+        if (selectedPort.in_use) switchTab('detail');
+        else {
+          switchTab('biz');
+          if ($('releaseActions')) $('releaseActions').classList.remove('show');
+        }
+      } catch (e) {
+        console.warn('open modal occupancy refresh failed', e);
+      }
+
+      const inUse = !!(selectedPort && selectedPort.in_use);
+      const detailP = inUse ? loadPortDetail(selectedPort, gen) : null;
+
+      await panelP;
+      if (gen !== modalGeneration) return;
+      await loadModalContext(currentOdf, currentCable);
+
+      const disp2 = routeMeta?.display_name || currentDisplayName || panel.display_name || currentOdf;
+      $('modalTitle').textContent = selectedPort.fiber + ' · ' + disp2;
+      if (statusP && statusP.in_use) {
+        $('modalToast').className = 'toast ok';
+        $('modalToast').textContent = '已用 · ' + (statusP.cid || selectedPort.cid || '业务光路');
+      } else {
+        $('modalToast').className = 'toast';
+        $('modalToast').textContent = '';
+      }
+
+      const cableName = selectedPort.cable || currentCable || '';
+      $('lossCable').value = cableName;
+      $('lossCableShow').textContent = cableName || '—';
+      fillSelect($('lossFiber'), fibersForCable(cableName, selectedPort.fiber), '', null, null);
+      $('lossFiber').value = selectedPort.fiber;
+      let shownLoss = selectedPort.loss_db || '';
+      const sections = (panel && panel.cables) || [];
+      sections.forEach(s => {
+        (s.ports || []).forEach(p => {
+          if (!shownLoss && p.fiber === selectedPort.fiber && p.loss_db) shownLoss = p.loss_db;
+        });
+      });
+      $('lossDb').value = shownLoss;
+      fillSelect($('lossCid'), mergeCircuitOptions(selectedPort), '（可选）', 'cid', c => c.cid);
+
+      if (inUse) {
+        if (detailP) detailP.catch(e => {
+          $('detailContent').innerHTML = '<div class="empty-hint" style="padding:20px">加载失败：' + esc(e.message) + '</div>';
+        });
+      } else {
+        $('detailContent').innerHTML = '<div class="empty-hint" style="padding:20px">该端口暂无业务占用</div>';
+      }
+      setupBizForm(selectedPort, { resetLocalType: true });
+    } catch (e) {
+      $('modalToast').className = 'toast err';
+      $('modalToast').textContent = '加载端口配置失败：' + (e.message || e);
+      return;
+    }
+  }
+
+  $('selSite').onchange = () => onSiteChange(false);
+  $('selRoom').onchange = () => onRoomChange(false);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) tickNetboxSync(true);
+  });
+  window.refreshPanel = refreshPanel;
+  $('btnPortSync').onclick = () => syncModalPortStatus();
+  $('modalClose').onclick = closeModal;
+  $('modalBg').onclick = e => { if (e.target === $('modalBg')) closeModal(); };
+  function closeModal() {
+    stopSubmitBusy();
+    releaseEditLock();
+    $('modalBg').classList.remove('open');
+    document.body.style.overflow = '';
+    modalPortEl = null;
+  }
+
+  document.querySelectorAll('#modalTabs button').forEach(btn => {
+    btn.onclick = () => {
+      switchTab(btn.dataset.tab);
+      if (btn.dataset.tab === 'detail' && selectedPort && selectedPort.in_use) {
+        loadPortDetail(selectedPort, modalGeneration);
+      }
+      if (btn.dataset.tab === 'biz' && selectedPort && panel) {
+        setupBizForm(selectedPort);
+      }
+    };
+  });
+  $('bizMode').onchange = () => {
+    updateBizModeUi();
+    if (selectedPort && panel) setupBizForm(selectedPort);
+  };
+  $('bizDevice').onchange = () => loadDeviceIfaces($('bizDevice').value);
+
+  function showToast(ok, msg) {
+    const t = $('modalToast');
+    t.className = 'toast ' + (ok ? 'ok' : 'err');
+    t.innerHTML = msg;
+    if (!ok && /已被其他光路占用|请刷新页面/.test(String(msg || ''))) {
+      if (currentSite && currentRoom) {
+        loadRoomPanelOccupancy(currentSite, currentRoom, true).catch(() => {});
+      }
+      if (modalPortEl || selectedPort) {
+        syncModalPortStatus().catch(() => {});
+      }
+    }
+  }
+
+  let submitBusyTimer = null;
+  let submitBusyStarted = 0;
+  let submitBusyBtnRestore = null;
+  let submitBusySteps = [];
+  const SUBMIT_BUSY_ROTATE = [
+    '正在校验端口占用…',
+    '正在写入本地登记…',
+    '正在写入 NetBox 光路…',
+    '正在重建路径（最耗时）…',
+    '仍在处理，请勿关闭窗口…',
+  ];
+  const SWAP_BUSY_STEPS = [
+    '正在校验换芯方案…',
+    '正在更新缆段/跳纤…',
+    '正在重建光路追踪路径…',
+    '正在刷新端口占用…',
+    '仍在处理，请勿关闭窗口…',
+  ];
+  const LOSS_BUSY_STEPS = [
+    '正在保存光损…',
+    '正在写入 NetBox…',
+    '正在刷新端口状态…',
+  ];
+  const RELEASE_BUSY_STEPS = [
+    '正在解除登记…',
+    '正在清理跳纤/路径…',
+    '正在刷新机房占用…',
+    '仍在处理，请勿关闭窗口…',
+  ];
+  const PORT_SYNC_STEPS = [
+    '正在向 NetBox 核对占用…',
+    '正在刷新端口显示…',
+    '正在加载全程链路…',
+    '仍在处理，请勿关闭窗口…',
+  ];
+
+  function stopSubmitBusy() {
+    if (submitBusyTimer) {
+      clearInterval(submitBusyTimer);
+      submitBusyTimer = null;
+    }
+    const box = $('submitBusy');
+    if (box) {
+      box.classList.remove('show');
+      box.setAttribute('aria-busy', 'false');
+    }
+    if (submitBusyBtnRestore) {
+      const { btn, text } = submitBusyBtnRestore;
+      btn.disabled = false;
+      btn.classList.remove('busy');
+      btn.textContent = text;
+      submitBusyBtnRestore = null;
+    }
+  }
+
+  function startSubmitBusy(title, opts) {
+    opts = opts || {};
+    stopSubmitBusy();
+    submitBusyStarted = Date.now();
+    submitBusySteps = opts.steps && opts.steps.length ? opts.steps : SUBMIT_BUSY_ROTATE;
+    const btn = opts.button || $('bizSubmitBtn');
+    if (btn) {
+      submitBusyBtnRestore = { btn, text: btn.textContent };
+      btn.disabled = true;
+      btn.classList.add('busy');
+      btn.textContent = opts.buttonText || '处理中…';
+    }
+    const box = $('submitBusy');
+    if (!box) return;
+    $('submitBusyTitle').textContent = title || '正在提交…';
+    $('submitBusyStep').textContent = submitBusySteps[0];
+    $('submitBusyElapsed').textContent = '0 秒';
+    $('submitBusyHint').textContent = opts.hint || '请稍候，请勿关闭窗口';
+    box.classList.add('show');
+    box.setAttribute('aria-busy', 'true');
+    let tick = 0;
+    submitBusyTimer = setInterval(() => {
+      tick += 1;
+      const sec = Math.max(1, Math.round((Date.now() - submitBusyStarted) / 1000));
+      $('submitBusyElapsed').textContent = sec + ' 秒';
+      if (tick % 3 === 0) {
+        const i = Math.min(submitBusySteps.length - 1, Math.floor(tick / 3));
+        $('submitBusyStep').textContent = submitBusySteps[i];
+      }
+      if (sec >= 20) {
+        $('submitBusyHint').textContent = opts.longHint || '耗时较长属正常（NetBox 重建路径）';
+      }
+    }, 1000);
+  }
+
+  function setSubmitBusyStep(text) {
+    const el = $('submitBusyStep');
+    if (el && text) el.textContent = text;
+  }
+
+  async function releasePort(scope) {
+    if (!selectedPort) return;
+    const cid = selectedPort.cid || ( $('bizCid') && $('bizCid').value ) || '';
+    const fiber = selectedPort.fiber;
+    let msg;
+    if (scope === 'jumps') {
+      msg = `仅删除 ${fiber} 的 Front 跳纤/设备连线，保留光路缆段登记。\n\n确认继续？`;
+    } else if (scope === 'circuit') {
+      if (!cid) {
+        showToast(false, '未找到光路编号，无法删除整条光路');
+        return;
+      }
+      msg = `将删除整条光路「${cid}」的全部登记段，并清除相关跳纤。\n\n此操作不可恢复。确认删除？`;
+    } else {
+      msg = `将解除 ${fiber} 在光路「${cid || '当前'}」中的登记，并删除本端口跳纤。\n\n若需改到其他纤芯，请随后在新端口重新登记。\n\n确认继续？`;
+    }
+    if (!confirm(msg)) return;
+    const titles = {
+      jumps: '正在删除跳纤…',
+      circuit: '正在删除整条光路…',
+      port: '正在解除本端口登记…',
+    };
+    startSubmitBusy(titles[scope] || '正在修改…', {
+      steps: RELEASE_BUSY_STEPS,
+      hint: '正在同步 NetBox，请稍候',
+    });
+    try {
+      const d = await apiPost({
+        action: 'release',
+        scope: scope || 'port',
+        odf: currentOdf,
+        cable: selectedPort.cable || currentCable,
+        fiber: fiber,
+        cid: cid,
+        site: currentSite,
+        room: currentRoom,
+      });
+      setSubmitBusyStep('完成，正在刷新机房占用…');
+      closeModal();
+      if (currentSite && currentRoom) await loadRoomPanelOccupancy(currentSite, currentRoom, true);
+      stopSubmitBusy();
+      showToast(true, d.message);
+    } catch (err) {
+      stopSubmitBusy();
+      showToast(false, err.message);
+    }
+  }
+
+  $('btnReleasePort').onclick = () => releasePort('port');
+  if ($('btnDeleteCircuit')) $('btnDeleteCircuit').onclick = () => releasePort('circuit');
+  $('btnClearJumps').onclick = () => releasePort('jumps');
+
+  $('detailContent').addEventListener('click', e => {
+    const btn = e.target.closest('.btn-swap');
+    if (!btn) return;
+    const key = btn.getAttribute('data-swap-key');
+    const swap = key && traceSwapRegistry.get(key);
+    if (!swap) return;
+    if (swap.segment_type === 'jump') autoJumpSwap(swap);
+    else openSwapDialog(swap);
+  });
+
+  if ($('swapCancel')) $('swapCancel').onclick = closeSwapDialog;
+  if ($('swapConfirm')) $('swapConfirm').onclick = confirmSwap;
+  if ($('swapCrossFiber')) $('swapCrossFiber').onchange = updateSwapCrossUi;
+  if ($('swapPortA')) $('swapPortA').onchange = () => { if (!$('swapCrossFiber').checked && $('swapPortB')) $('swapPortB').value = $('swapPortA').value; };
+  if ($('swapOverlay')) {
+    $('swapOverlay').addEventListener('click', e => { if (e.target === $('swapOverlay')) closeSwapDialog(); });
+  }
+
+  $('lossForm').onsubmit = async e => {
+    e.preventDefault();
+    const body = Object.fromEntries(new FormData(e.target).entries());
+    body.odf = currentOdf; body.action = 'loss';
+    body.cable = body.cable || (selectedPort && selectedPort.cable) || currentCable || '';
+    body.site = currentSite || '';
+    body.room = currentRoom || '';
+    startSubmitBusy('正在保存光损…', {
+      button: $('lossSubmitBtn'),
+      buttonText: '保存中…',
+      steps: LOSS_BUSY_STEPS,
+      hint: '正在写入 NetBox',
+    });
+    try {
+      const d = await apiPost(body);
+      const savedLoss = body.loss_db || d.loss_db || '';
+      if (selectedPort) selectedPort.loss_db = savedLoss;
+      if ($('lossDb')) $('lossDb').value = savedLoss;
+      if (modalPortEl) modalPortEl.dataset.loss = savedLoss;
+      setSubmitBusyStep('已保存，正在刷新…');
+      await refreshPanel();
+      stopSubmitBusy();
+      showToast(true, d.message);
+    } catch (err) {
+      stopSubmitBusy();
+      showToast(false, err.message);
+    }
+  };
+
+  $('bizForm').onsubmit = async e => {
+    e.preventDefault();
+    const btn = $('bizSubmitBtn');
+    const body = Object.fromEntries(new FormData(e.target).entries());
+    body.odf = cleanStr(currentOdf) || cleanStr(selectedPort && selectedPort.odf);
+    body.action = 'segment';
+    body.local_type = $('bizLocalType').value;
+    body.cable = cleanStr(body.cable) || cleanStr(currentCable) || cleanStr(selectedPort && selectedPort.cable);
+    body.peer_odf = cleanStr(body.peer_odf) || resolvePeerOdf(selectedPort);
+    body.port_local = body.port_local || $('bizPortLocal').value || (selectedPort && selectedPort.fiber) || '';
+    body.port_peer = body.port_peer || $('bizPortPeer').value || body.port_local;
+    if (!body.odf) {
+      showToast(false, '缺少本端 ODF，请关闭后重新点选端口');
+      return;
+    }
+    if (!body.cable && !body.peer_odf) {
+      showToast(false, '缺少缆段信息，请关闭后重新点选端口');
+      return;
+    }
+    if (body.mode === 'new') delete body.cid; else delete body.business_name;
+    if (body.mode === 'continue' && !body.cid) {
+      showToast(false, '请选择已有光路，或改用「新建光路」');
+      return;
+    }
+    if (body.local_type === 'trunk_only') {
+      delete body.jump_odf; delete body.jump_fiber; delete body.device; delete body.device_port;
+    } else if (body.local_type === 'jump_odf') {
+      const rk = $('bizJumpOdf').value;
+      if (!rk) {
+        showToast(false, '请选择跳纤目标 ODF 框');
+        return;
+      }
+      const tgt = resolveJumpTarget(rk);
+      body.jump_odf = tgt.odf;
+      body.jump_cable = tgt.cable;
+      delete body.device; delete body.device_port;
+    } else if (body.local_type === 'to_device') {
+      if (!body.device) {
+        showToast(false, '请选择本机房交换机/光模块（需先在 NetBox 创建设备）');
+        return;
+      }
+      if (!body.device_port) {
+        showToast(false, '请选择设备光口');
+        return;
+      }
+      delete body.jump_odf; delete body.jump_fiber;
+    }
+    startSubmitBusy(body.mode === 'new' ? '正在新建光路…' : '正在续接光路…', {
+      button: $('bizSubmitBtn'),
+      buttonText: '提交中…',
+      hint: '正在写入 NetBox 路径',
+      longHint: 'NetBox 正在重建路径，通常十几秒内完成',
+    });
+    try {
+      const d = await apiPost(body);
+      let msg = d.message + '<br>光路：' + d.cid;
+      if (d.segment_skipped) msg += '<br><span style="opacity:.85">（未重复登记缆段，仅延伸跳纤/设备）</span>';
+      if (d.is_complete) msg += '<br><strong style="color:#81c784">路径已完整，可追踪</strong>';
+      else if (d.segment_count) msg += '<br>已登记 ' + d.segment_count + ' 段，请继续下一节点';
+      if (d.peer_odf) msg += '<br>对端：' + d.peer_odf;
+      if (d.trace_url && /\/fiber-circuit-paths\/\d+/.test(String(d.trace_url))) {
+        msg += '<br><a href="' + d.trace_url + '" target="_blank">打开追踪</a>';
+      }
+      let el = resolveModalPortEl(selectedPort);
+      if (el && d.cid) {
+        el = await applyStatusToOpenModal(el, {
+          in_use: true,
+          cid: d.cid,
+          fp_id: el.dataset.fpId || (selectedPort && (selectedPort.fp_id || selectedPort.id)) || ''
+        }, modalGeneration) || el;
+        modalPortEl = el;
+      }
+      stopSubmitBusy();
+      showToast(true, msg);
+      if (currentSite && currentRoom) {
+        loadRoomPanelOccupancy(currentSite, currentRoom, false).then(() => {
+          const live = resolveModalPortEl(selectedPort);
+          if (live) modalPortEl = live;
+        }).catch(() => {});
+      }
+    } catch (err) {
+      stopSubmitBusy();
+      showToast(false, err.message);
+    }
+  };
+
+  window.addEventListener('pagehide', () => { releaseEditLock(); });
+  window.addEventListener('beforeunload', () => { releaseEditLock(); });
+
+  bindPortClicks();
+  startNetboxSyncTimer();
+  // Richer device info for audit (IP still recorded by server)
+  try {
+    fetch("/api/audit/beacon", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        page: "portal",
+        platform: navigator.platform || "",
+        language: navigator.language || "",
+        timezone: (Intl.DateTimeFormat().resolvedOptions().timeZone || ""),
+        screen: (screen.width || 0) + "x" + (screen.height || 0),
+        vendor: navigator.vendor || ""
+      }),
+      keepalive: true
+    }).catch(() => {});
+  } catch (_) {}
+  window.addEventListener('pageshow', ev => {
+    if (!ev.persisted) return;
+    let stale = false;
+    try { stale = sessionStorage.getItem('odfTreeStale') === '1'; } catch (_) {}
+    if (!stale) return;
+    try { sessionStorage.removeItem('odfTreeStale'); } catch (_) {}
+    loadTree({ refresh: true, silent: true, keepSite: currentSite, keepRoom: currentRoom }).catch(() => {});
+  });
+
+  loadTree({ refresh: (function(){
+    const qs = new URLSearchParams(location.search);
+    let stale = qs.get('refresh') === '1';
+    try { stale = stale || sessionStorage.getItem('odfTreeStale') === '1'; if (stale) sessionStorage.removeItem('odfTreeStale'); } catch (_) {}
+    return stale;
+  })() }).catch(e => {
+    fillSelect($('selSite'), [], '加载失败');
+    $('selSite').disabled = true;
+    $('panelArea').innerHTML = '<div class="empty-hint">加载失败：' + esc(e.message) + '<br><br>请尝试刷新页面，或联系管理员确认 field API（8765）是否运行。</div>';
+  });
+})();
+</script>
+</body>
+</html>

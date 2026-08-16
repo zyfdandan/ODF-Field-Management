@@ -1,0 +1,17 @@
+[Unit]
+Description=NetBox ODF Field API
+After=network.target
+
+[Service]
+Type=simple
+User=zttg
+WorkingDirectory=/home/zttg/netbox-field-portal
+Environment=PYTHONUNBUFFERED=1
+Environment=FIELD_CACHE_WARMUP=1
+ExecStart=/home/zttg/netbox-field-portal/venv/bin/python3 /home/zttg/netbox-field-portal/field_portal/field_api.py --host 127.0.0.1 --port 8765
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

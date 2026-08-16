@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>现场系统 · 审计日志</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --card: #121a28;
+      --line: #243044;
+      --text: #e8eef7;
+      --muted: #8b9bb4;
+      --ok: #3dd68c;
+      --bad: #ff6b6b;
+      --accent: #5b8cff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      background: #0e1624;
+    }
+    h1 { margin: 0; font-size: 1.1rem; font-weight: 650; }
+    .sub { color: var(--muted); font-size: .78rem; margin-top: 4px; }
+    .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    input, select, button {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: .85rem;
+    }
+    button {
+      background: var(--accent);
+      border-color: transparent;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button.secondary { background: var(--card); border-color: var(--line); }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    a.back { color: var(--accent); text-decoration: none; font-size: .85rem; }
+    .cache-panel {
+      margin: 0 20px 0;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--card);
+    }
+    .cache-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .cache-msg { color: var(--muted); font-size: .8rem; flex: 1; min-width: 200px; }
+    .cache-msg.ok { color: var(--ok); }
+    .cache-msg.bad { color: var(--bad); }
+    .bar {
+      margin-top: 10px;
+      height: 8px;
+      background: #0b1220;
+      border: 1px solid var(--line);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .bar > span {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, #3b6fd4, #5b8cff);
+      transition: width .25s ease;
+    }
+    .bar.done > span { background: var(--ok); }
+    .bar.err > span { background: var(--bad); }
+    main { padding: 16px 20px 40px; }
+    .meta { color: var(--muted); font-size: .78rem; margin-bottom: 10px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      font-size: .8rem;
+    }
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #162033;
+      color: #b8c7de;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    tr:last-child td { border-bottom: none; }
+    .ok { color: var(--ok); }
+    .bad { color: var(--bad); }
+    .ua { color: var(--muted); word-break: break-all; max-width: 360px; }
+    .empty { padding: 40px; text-align: center; color: var(--muted); }
+    @media (max-width: 800px) {
+      table, thead, tbody, th, td, tr { display: block; }
+      thead { display: none; }
+      tr { border-bottom: 1px solid var(--line); padding: 10px 0; }
+      td { border: none; padding: 4px 12px; }
+      td::before {
+        content: attr(data-label);
+        display: inline-block;
+        min-width: 72px;
+        color: var(--muted);
+        font-size: .72rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>审计日志</h1>
+      <div class="sub">记录访问 IP、设备信息与时间。NetBox 后台改完后点「更新占用」同步现场缓存。</div>
+    </div>
+    <div class="tools">
+      <a class="back" href="javascript:history.back()">← 返回</a>
+      <select id="actionFilter">
+        <option value="">全部动作</option>
+        <option value="page_view">页面访问</option>
+        <option value="beacon">设备上报</option>
+        <option value="submit">业务提交</option>
+        <option value="room_order">机房排序</option>
+        <option value="audit_view">查看审计</option>
+        <option value="cache_refresh">更新缓存</option>
+      </select>
+      <input id="ipFilter" placeholder="按 IP 筛选" style="width:140px" />
+      <select id="limitSel">
+        <option value="100">最近 100</option>
+        <option value="200" selected>最近 200</option>
+        <option value="500">最近 500</option>
+      </select>
+      <button type="button" id="btnReload">刷新</button>
+    </div>
+  </header>
+  <div class="cache-panel">
+    <div class="cache-row">
+      <button type="button" id="btnOcc">更新占用</button>
+      <button type="button" id="btnFull" class="secondary">全量重建</button>
+      <span class="cache-msg" id="cacheMsg">读取缓存状态…</span>
+    </div>
+    <div class="bar" id="cacheBar"><span id="cacheFill"></span></div>
+  </div>
+  <main>
+    <div class="meta" id="meta">加载中…</div>
+    <div id="tableWrap"><div class="empty">暂无数据</div></div>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    // Support direct :8765 and Node-RED /odf proxy
+    const API_PREFIX = location.pathname.indexOf("/odf/") >= 0 ? "/odf" : "";
+
+    function esc(s) {
+      return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[c]);
+    }
+
+    function deviceText(d) {
+      if (!d || typeof d !== "object") return "—";
+      const bits = [];
+      if (d.platform) bits.push(d.platform);
+      if (d.screen) bits.push(d.screen);
+      if (d.timezone) bits.push(d.timezone);
+      if (d.language || d.accept_language) bits.push(d.language || d.accept_language);
+      const head = bits.join(" · ") || "—";
+      const ua = d.user_agent || "";
+      return `<div>${esc(head)}</div><div class="ua">${esc(ua)}</div>`;
+    }
+
+    function detailText(rec) {
+      const d = rec.detail || {};
+      const parts = [];
+      if (d.page) parts.push("page=" + d.page);
+      if (d.action) parts.push("action=" + d.action);
+      if (d.odf) parts.push("odf=" + d.odf);
+      if (d.cid) parts.push("cid=" + d.cid);
+      if (d.site) parts.push("site=" + d.site);
+      if (d.room) parts.push("room=" + d.room);
+      if (rec.error) parts.push("err=" + rec.error);
+      return parts.join("；") || "—";
+    }
+
+    function formatTs(ts) {
+      if (!ts) return "—";
+      const d = new Date(ts);
+      if (Number.isNaN(d.getTime())) return String(ts);
+      try {
+        return new Intl.DateTimeFormat("zh-CN", {
+          timeZone: "Asia/Shanghai",
+          year: "numeric", month: "2-digit", day: "2-digit",
+          hour: "2-digit", minute: "2-digit", second: "2-digit",
+          hour12: false,
+        }).format(d);
+      } catch (_) {
+        return d.toLocaleString("zh-CN", { hour12: false });
+      }
+    }
+
+    let lastNewest = "";
+
+    async function load() {
+      const action = $("actionFilter").value;
+      const ip = $("ipFilter").value.trim();
+      const limit = $("limitSel").value;
+      const qs = new URLSearchParams({ limit, _t: String(Date.now()) });
+      if (action) qs.set("action", action);
+      if (ip) qs.set("ip", ip);
+      $("meta").textContent = "加载中…";
+      try {
+        const res = await fetch(API_PREFIX + "/api/audit?" + qs.toString(), {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" },
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        const rows = data.rows || [];
+        const newest = rows[0] ? formatTs(rows[0].ts) : "—";
+        const changed = lastNewest && newest !== lastNewest;
+        lastNewest = newest;
+        const tip = changed ? " · 已更新" : "";
+        $("meta").textContent =
+          `共 ${rows.length} 条 · 最新 ${newest}${tip} · 刷新于 ${formatTs(new Date().toISOString())}`;
+        if (!rows.length) {
+          $("tableWrap").innerHTML = '<div class="empty">暂无匹配记录</div>';
+          return;
+        }
+        const body = rows.map((r) => `
+          <tr>
+            <td data-label="时间">${esc(formatTs(r.ts))}</td>
+            <td data-label="动作">${esc(r.action)}</td>
+            <td data-label="IP">${esc(r.ip)}</td>
+            <td data-label="结果" class="${r.ok === false ? "bad" : "ok"}">${r.ok === false ? "失败" : "成功"}</td>
+            <td data-label="路径">${esc((r.method || "") + " " + (r.path || ""))}</td>
+            <td data-label="设备">${deviceText(r.device)}</td>
+            <td data-label="详情">${esc(detailText(r))}</td>
+          </tr>`).join("");
+        $("tableWrap").innerHTML = `
+          <table>
+            <thead>
+              <tr>
+                <th>时间</th><th>动作</th><th>IP</th><th>结果</th><th>路径</th><th>设备</th><th>详情</th>
+              </tr>
+            </thead>
+            <tbody>${body}</tbody>
+          </table>`;
+      } catch (e) {
+        $("meta").textContent = "加载失败：" + e.message;
+        $("tableWrap").innerHTML = '<div class="empty">加载失败</div>';
+      }
+    }
+
+    $("btnReload").onclick = load;
+    $("actionFilter").onchange = load;
+    $("limitSel").onchange = load;
+    $("ipFilter").addEventListener("keydown", (e) => { if (e.key === "Enter") load(); });
+
+    let cachePoll = null;
+
+    function setBusy(busy) {
+      $("btnOcc").disabled = busy;
+      $("btnFull").disabled = busy;
+    }
+
+    function renderRefresh(data) {
+      const r = (data && data.refresh) || {};
+      const running = !!r.running;
+      const pct = Number(r.pct || 0);
+      const phase = r.phase || "idle";
+      $("cacheFill").style.width = Math.max(0, Math.min(100, pct)) + "%";
+      $("cacheBar").classList.toggle("done", !running && phase === "done");
+      $("cacheBar").classList.toggle("err", phase === "error");
+      $("cacheMsg").classList.toggle("ok", !running && phase === "done");
+      $("cacheMsg").classList.toggle("bad", phase === "error");
+      setBusy(running);
+      const rooms = data && data.room_panel_count != null ? data.room_panel_count : "—";
+      const bits = [];
+      if (r.label) bits.push(r.label);
+      else if (running) bits.push("刷新中…");
+      else bits.push("缓存空闲");
+      if (r.elapsed_sec && running) bits.push(r.elapsed_sec + "s");
+      bits.push("机房 " + rooms);
+      $("cacheMsg").textContent = bits.join(" · ");
+      if (running && !cachePoll) {
+        cachePoll = setInterval(loadCache, 800);
+      } else if (!running && cachePoll) {
+        clearInterval(cachePoll);
+        cachePoll = null;
+      }
+    }
+
+    async function loadCache() {
+      try {
+        const res = await fetch(API_PREFIX + "/api/cache/status?_t=" + Date.now(), {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" },
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        renderRefresh(data);
+      } catch (e) {
+        $("cacheMsg").textContent = "缓存状态读取失败：" + e.message;
+        $("cacheMsg").classList.add("bad");
+      }
+    }
+
+    async function startRefresh(mode) {
+      setBusy(true);
+      $("cacheMsg").classList.remove("ok", "bad");
+      $("cacheMsg").textContent = mode === "full" ? "正在启动全量重建…" : "正在启动占用更新…";
+      try {
+        let res = await fetch(API_PREFIX + "/api/cache/refresh", {
+          method: "POST",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
+          body: JSON.stringify({ mode }),
+        });
+        if (res.status === 404) {
+          const qs = new URLSearchParams({ mode, _t: String(Date.now()) });
+          res = await fetch(API_PREFIX + "/api/cache/refresh?" + qs.toString(), {
+            cache: "no-store",
+            headers: { "Cache-Control": "no-cache" },
+          });
+        }
+        const data = await res.json();
+        if (!res.ok && res.status !== 409) throw new Error(data.error || data.message || res.statusText);
+        renderRefresh(data.refresh ? data : { refresh: data });
+        loadCache();
+      } catch (e) {
+        setBusy(false);
+        $("cacheMsg").classList.add("bad");
+        $("cacheMsg").textContent = "启动失败：" + e.message;
+      }
+    }
+
+    $("btnOcc").onclick = () => startRefresh("occupancy");
+    $("btnFull").onclick = () => {
+      if (!confirm("将按 NetBox 重建全部机房结构，可能需要几分钟。确定？")) return;
+      startRefresh("full");
+    };
+
+    load();
+    loadCache();
+    setInterval(load, 15000);
+    setInterval(() => { if (!cachePoll) loadCache(); }, 10000);
+  </script>
+</body>
+</html>

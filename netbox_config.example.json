@@ -1,0 +1,7 @@
+{
+  "base_url": "http://YOUR_NETBOX_HOST:8000/api",
+  "web_base_url": "http://YOUR_NETBOX_HOST:8000",
+  "token": "YOUR_API_TOKEN",
+  "verify_ssl": false,
+  "qr_output_dir": "qr_labels"
+}
