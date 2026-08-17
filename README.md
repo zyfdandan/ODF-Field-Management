@@ -1,164 +1,173 @@
-# ODF 现场管理系统
+# ODF-Field-Management
 
-基于 **NetBox + FMS 光缆插件** 的光纤配线架（ODF）现场作业系统：  
-支持 Excel 批量导入光路/熔接/光损，以及手机扫码现场登记（Field Portal）。
+面向厂矿 / 园区光纤运维的 ODF（光纤配线架）现场管理系统。当前以 GitHub
+`main` 为发布基线（无独立 semver；离线安装包以构建日期戳标识），在已部署的
+**NetBox + FMS 光缆插件** 之上提供 Excel 批量导入与手机扫码现场登记：后台表格
+与现场表单写入同一套设备 / 端口 / 光路数据，并支持轻量审计与软编辑锁。
 
-> 本仓库**不包含**真实服务器地址、API Token、SSH 密码等敏感信息。部署前请按下方说明自行配置。
+> 本仓库**不包含**真实服务器地址、API Token、SSH 密码或厂区拓扑。部署前请按
+> 下方「本地私有配置」自行准备。Field API 应仅本机监听，由 Node-RED 对外反代。
 
----
+## 功能概览
 
-## 项目简介
+| 能力 | 当前实现 |
+|---|---|
+| Excel 光路导入 | 光路分段、ODF 内熔接、缆段纤芯 OTDR 光损；导入后全链路校验 |
+| 模板生成 | `generate_template.py` 生成标准 Excel 工作簿 |
+| 基础设施脚本 | `bootstrap_*` / `check_*` / `fix_*`：测试 ODF、端口命名、纤芯对称性等 |
+| Field Portal 表单 | 手机扫码填写本端端口与对端信息，写回 NetBox 并刷新追踪 |
+| 机房 / ODF 面板 | 树形浏览、房间面板与 ODF 面板 API |
+| 骨干 / trunk 登记 | `trunk_form.html` 与对应 API（按公开仓实现） |
+| 软编辑锁 | 按 ODF\|缆\|纤芯加锁，TTL 约数分钟；身份近似客户端 IP + UA，无账号体系 |
+| 审计 | JSONL 审计流与 `/audit` 页面；非完整 RBAC |
+| 二维码标签 | 按 ODF 生成扫码入口（指向 Node-RED 公网/内网基址） |
+| 离线打包与部署 | `deploy/` 下 PowerShell 打包、Linux 安装脚本与 systemd 示例 |
 
-面向厂矿/园区光纤网络运维场景，把「表格录入」和「现场扫码」接到同一套 NetBox 数据上：
+部分能力依赖 NetBox/FMS 插件版本、Node-RED 流程是否已 Deploy，以及现场网络
+可达性。仓库不会把未安装插件或未验收的现场拓扑描述为已经可用。
 
-- **后台导入**：用 Excel 维护光路分段、ODF 内熔接、缆段纤芯 OTDR 光损  
-- **现场门户**：每个 ODF 贴二维码，手机扫码填写本端端口与对端信息，自动写回 NetBox 并刷新追踪  
-- **部署工具**：提供离线安装包脚本与 SSH 一键部署（需自备 Linux 服务器与 NetBox）
+## 支持平台与技术栈
 
----
+- 语言：Python 3.10+（建议 3.11）；辅助 PowerShell / Bash。
+- Field API：标准库 `ThreadingHTTPServer` + 自研 handler（非 Flask/FastAPI）。
+- Excel / HTTP / 二维码：`openpyxl`、`requests`、`qrcode[pil]`。
+- 前端：静态 HTML（表单、面板、审计页）。
+- 公网入口：Node-RED **3.1.9**（典型 `:1880`，反代 `/odf` 与 `/odf/api`）。
+- 数据源：NetBox REST API + FMS 纤缆插件。
+- 部署：venv、systemd（`netbox-field-api`、`nodered`），可选 SSH 一键推送。
 
-## 主要能力
+## 架构
 
-| 模块 | 能力 |
-|------|------|
-| Excel 导入 | 光路录入、熔接录入、缆段纤芯光损；导入后全链路校验 |
-| 基础设施脚本 | 引导创建测试 ODF/缆段、端口命名同步、纤芯对称性检查等 |
-| Field Portal | 移动端表单、机房面板浏览、编辑锁、审计页 |
-| 二维码 | 按 ODF 生成扫码入口（Node-RED 公网/内网地址） |
-| 部署 | `deploy/` 下打包、安装、systemd 服务示例 |
-
----
-
-## 架构概览
-
-```
+```text
 ┌──────────────────┐     ┌────────────────────┐
-│  Excel / 脚本导入 │     │ 手机扫码 Field 表单  │
+│ Excel / 运维脚本  │     │ 手机扫码 Field 表单  │
 └────────┬─────────┘     └─────────┬──────────┘
          │                         │
          │              ┌──────────▼──────────┐
-         │              │ Node-RED（跳板 :1880）│
+         │              │ Node-RED（:1880）    │
+         │              │ 静态页 + API 反代    │
          │              └──────────┬──────────┘
-         │                         │
+         │                         │ 127.0.0.1
          │              ┌──────────▼──────────┐
          └─────────────►│ Field API（:8765）   │
-                        │ 持有 NetBox Token     │
+                        │ 持有 NetBox Token    │
+                        │ 缓存 / 软锁 / 审计   │
                         └──────────┬──────────┘
                                    │
                         ┌──────────▼──────────┐
-                        │ NetBox + FMS 插件     │
-                        │ 设备/端口/光路/追踪   │
+                        │ NetBox + FMS 插件    │
+                        │ 设备/端口/光路/追踪  │
                         └─────────────────────┘
 ```
 
----
+导入脚本与 Field API 共享 NetBox 数据面。对外只应暴露 Node-RED；Token 留在
+本机 Field API 进程，不进入前端静态页。
 
-## 目录结构
+## 仓库结构
 
-```
-ODF-Field-Management/
-├── README.md                 # 本说明
-├── netbox_config.example.json
-├── import_from_excel.py      # Excel 一键导入
-├── generate_template.py      # 生成 Excel 模板
-├── bootstrap_*.py            # 测试基础设施
-├── field_portal/             # 现场门户（API + 前端页 + Node-RED 流程）
-│   ├── field_api.py
-│   ├── field_service.py
-│   ├── index.html / form.html / audit.html
-│   ├── nodered_flow.json
-│   └── portal_config.example.json
-├── deploy/                   # 安装与部署文档/脚本
-└── qr_labels/                # 本地生成二维码（不入库）
-```
+| 路径 | 用途 |
+|---|---|
+| `netbox_config.example.json` | NetBox API 配置模板 |
+| `import_from_excel.py` | Excel 一键导入入口 |
+| `generate_template.py` | 生成 Excel 模板 |
+| `bootstrap_*.py` / `check_*.py` / `fix_*.py` | 引导、校验与修复脚本 |
+| `fiber_infra.py` / `naming_rules.py` | 共享命名与导入逻辑 |
+| `field_portal/` | Field API、前端页、Node-RED 流程、锁与审计 |
+| `field_portal/portal_config.example.json` | 门户配置模板 |
+| `deploy/` | 打包、安装、systemd 与部署文档 |
+| `qr_labels/` | 本地二维码输出（默认不入库） |
 
----
-
-## 环境要求
-
-- Python 3.10+（建议 3.11）
-- 可访问的 NetBox 实例，并安装光纤/FMS 相关插件
-- 现场门户另需：Node.js / Node-RED（可用 `deploy` 离线包）
-- Windows 可用于打安装包与 SSH 部署；服务器端建议 Linux
-
-依赖示例：
+## 获取源码
 
 ```powershell
-pip install requests openpyxl qrcode[pil]
+git clone https://github.com/zyfdandan/ODF-Field-Management.git
+Set-Location ODF-Field-Management
 ```
 
----
+## 本地私有配置
+
+仓库不跟踪 Token、SSH 密码、真实 URL 与运行时状态。首次使用请：
+
+- `netbox_config.example.json` → 本地 `netbox_config.json`
+- `field_portal/portal_config.example.json` → 本地 `field_portal/portal_config.json`
+- 如需 SSH 部署：`deploy/deploy.env.example`（若有）→ 本地 `deploy/deploy.env`
+
+下列路径仅本机保留，勿提交：
+
+- `field_portal/edit_locks.json`、缓存 JSON、`logs/`
+- `qr_labels/`、`backup/`、`dist/`、真实拓扑报告
+
+真实值只保存在本机或服务器安全路径。不要在 issue、日志或截图中公开它们。
+
+## 运行依赖
+
+1. Python 3.10+，以及可访问的 NetBox（已装 FMS 相关插件）。
+2. 现场门户另需 Node.js / Node-RED（可用 `deploy` 离线包）。
+3. 安装依赖：
+
+```powershell
+pip install requests openpyxl "qrcode[pil]"
+```
 
 ## 快速开始
 
-### 1. 配置 NetBox（必做）
+### 1. 配置 NetBox
 
-```powershell
-copy netbox_config.example.json netbox_config.json
-```
-
-编辑 `netbox_config.json`：
+编辑本地 `netbox_config.json`：
 
 | 字段 | 说明 |
-|------|------|
+|---|---|
 | `base_url` | NetBox API，如 `http://你的主机:8000/api` |
 | `web_base_url` | NetBox 网页根，如 `http://你的主机:8000` |
-| `token` | NetBox API Token（仅本机保存，勿提交） |
+| `token` | NetBox API Token（仅本机保存） |
 
-### 2. Excel 导入光路
+### 2. Excel 导入
 
 ```powershell
-# 生成模板
 python generate_template.py
-
-# 填写「光路录入 / 熔接录入 / 缆段纤芯光损」后导入
 python import_from_excel.py
 ```
 
-导入成功会提示全链路校验通过；失败时按提示检查熔接或缆段编号。
-
-### 3. 现场门户（扫码登记）
+### 3. 启动 Field Portal
 
 ```powershell
-copy field_portal\portal_config.example.json field_portal\portal_config.json
-# 将 nodered_base_url 改成手机能访问的 Node-RED 地址
-
-# 启动 Field API（持有 Token，勿暴露到公网无鉴权）
 python field_portal\field_api.py --host 127.0.0.1 --port 8765
+```
 
-# 另开终端启动 Node-RED，导入 field_portal/nodered_flow.json 并 Deploy
-node-red
+另开终端启动 Node-RED，导入 `field_portal/nodered_flow.json` 并 Deploy。
 
-# 生成 ODF 二维码
+生成二维码：
+
+```powershell
 python field_portal\generate_odf_qr.py --base-url http://你的NodeRED主机:1880
 ```
 
-更细的门户说明见 [`field_portal/README.md`](field_portal/README.md)。  
-完整服务器部署见 [`deploy/DEPLOYMENT.md`](deploy/DEPLOYMENT.md)。
+健康检查：
 
----
+```text
+curl http://127.0.0.1:8765/health
+curl http://主机:1880/odf/api/health
+```
 
-## 安全说明
+## 服务器部署
 
-公开仓库已刻意排除 / 脱敏：
+公开仓 `deploy/` 提供打包与安装入口，典型流程：
 
-- `netbox_config.json`、`portal_config.json`、`deploy.env`
-- SSH 密码、API Token、真实内网地址
-- 运行时缓存、现场业务数据导出、本地 backup
-- 带真实 URL 的二维码清单与追踪 HTML 快照
+1. 本机构建离线包（可选包含 Node-RED）。
+2. 上传到 Linux 服务器并执行 `deploy/install_from_package.sh`。
+3. 启用 systemd 单元，确认 Field API 仅监听本机、Node-RED 对外。
 
-**请勿**把生产 Token、密码、厂区真实拓扑机密数据推送到 Git。若 Token 曾泄露，请在 NetBox 中立即轮换。
+细节见 `deploy/DEPLOYMENT.md`（若存在）及脚本内注释。生产环境务必轮换
+Token，并限制 Node-RED / API 的网络暴露面。
 
----
+## 测试与验证
 
-## 相关文档
+- 导入后：在 NetBox 核对设备、端口、光路与追踪页是否一致。
+- 现场：扫码打开表单 → 提交 → 确认锁冲突与审计记录。
+- 部署后：本机 `/health` 与经反代的 `/odf/api/health` 均应返回正常。
 
-- [field_portal/README.md](./field_portal/README.md) — 扫码门户  
-- [deploy/DEPLOYMENT.md](./deploy/DEPLOYMENT.md) — 人工部署  
-- [deploy/AI-DEPLOY.md](./deploy/AI-DEPLOY.md) — 结构化部署清单  
+## 许可与使用边界
 
----
-
-## 声明
-
-本项目面向已获授权的网络资源管理场景。使用前请遵守单位制度与当地法律法规，勿用于未授权的网络探测或变更。
+仓库未放置 OSI 开源许可证文件时，默认保留所有权利，仅供获授权场景使用。
+请遵守当地法规与业主网络管理规定；勿对外分发真实厂区拓扑、Token 或 SSH
+凭据。
