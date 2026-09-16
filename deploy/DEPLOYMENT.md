@@ -197,6 +197,18 @@ curl -s http://127.0.0.1:1880/odf/api/health
 
 - 管理界面：`http://服务器IP:1880/`
 - 扫码表单：`http://服务器IP:1880/odf?odf=设备名`
+- 机房面板路由旁 **图片**：可查看 / 上传 / 替换 / 删除（经 Field API 代理 NetBox ImageAttachment）
+
+图片附件冒烟（本机 Field API）：
+
+```bash
+# 路由已挂载（应返回 JSON 错误而非 HTTP 404）
+curl -s 'http://127.0.0.1:8765/api/device-images?device_id=0'
+# 真实设备：curl -s "http://127.0.0.1:8765/api/device-images?device_id=<DEVICE_ID>"
+```
+
+确认 `.nodered/settings.js` 含 `apiMaxLength: '25mb'`（大图上传），且 flow 含
+`/api/device-images/.../file` 的二进制代理（`ret: "bin"`）。细节见 [AI-DEPLOY.md](./AI-DEPLOY.md)。
 
 ---
 

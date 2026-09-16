@@ -65,7 +65,12 @@ python field_portal\generate_odf_qr.py --base-url http://你的NodeRED主机:188
 
 门户首页可按站点/机房浏览端口占用与路由，便于现场核对空闲纤芯。
 
+路由显示名旁的 **图片** 可查看 / 上传 / 替换 / 删除该 ODF 设备在 NetBox 上的
+图片附件（经 Field API 代理，手机无需登录 NetBox）。API 见仓库根目录
+`README.md`「设备图片附件」一节。
+
 ## 安全注意
 
 - `portal_config.json`、运行缓存、审计数据仅存本机  
 - 部署脚本密码请用环境变量或 `deploy/deploy.env`，不要写进仓库  
+- 图片上传经 Node-RED 时使用 JSON base64；勿假设 multipart 能穿过默认反代  
