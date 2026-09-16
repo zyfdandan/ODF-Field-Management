@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import cgi
 import json
 import os
+import re
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -19,6 +22,14 @@ if str(Path(__file__).resolve().parent) not in sys.path:
 
 from field_audit import client_ip, device_from_headers, log_path, read_audit, write_audit
 from field_browser import get_location_tree, get_odf_modal_panel, get_odf_port_panel, get_room_port_panel
+from field_images import (
+    delete_device_image,
+    fetch_attachment_bytes,
+    list_device_images,
+    parse_attachment_id,
+    parse_device_id,
+    upload_device_image,
+)
 from field_locks import acquire_lock, assert_editable, lock_status_public, release_lock, renew_lock
 from field_service import (
     client_from_config,
@@ -66,6 +77,15 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _bytes(self, code: int, body: bytes, content_type: str) -> None:
+        self.send_response(code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cache-Control", "private, max-age=60")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _html(self, code: int, html: str) -> None:
         body = html.encode("utf-8")
         self.send_response(code)
@@ -99,7 +119,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self) -> None:
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
@@ -349,6 +369,30 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(500, {"error": str(e)})
             return
 
+        # GET /api/device-images?device_id=
+        if path in ("/api/device-images", "/device-images") or path.endswith("/device-images"):
+            try:
+                did = parse_device_id((qs.get("device_id") or [""])[0])
+                self._json(200, list_device_images(client, did))
+            except ValueError as e:
+                self._json(400, {"error": str(e)})
+            except Exception as e:
+                self._json(502, {"error": str(e)})
+            return
+
+        # GET /api/device-images/{id}/file
+        m = re.search(r"/device-images/(\d+)/file/?$", path)
+        if m:
+            try:
+                aid = parse_attachment_id(m.group(1))
+                body, ctype = fetch_attachment_bytes(client, aid)
+                self._bytes(200, body, ctype)
+            except ValueError as e:
+                self._json(400, {"error": str(e)})
+            except Exception as e:
+                self._json(502, {"error": str(e)})
+            return
+
         self._json(404, {"error": "not found"})
 
     def do_POST(self) -> None:
@@ -397,6 +441,60 @@ class Handler(BaseHTTPRequestHandler):
                 device_extra=extra,
             )
             self._json(200, {"ok": True})
+            return
+
+        # POST /api/device-images — multipart or JSON content_base64 (before JSON allow-list)
+        if path.endswith("/device-images") or path == "/api/device-images":
+            try:
+                ctype = self.headers.get("Content-Type", "")
+                length = int(self.headers.get("Content-Length", 0))
+                cfg = {**load_config(), **self.config}
+                client = client_from_config(cfg)
+                if "multipart/form-data" in ctype:
+                    form = cgi.FieldStorage(
+                        fp=self.rfile,
+                        headers=self.headers,
+                        environ={
+                            "REQUEST_METHOD": "POST",
+                            "CONTENT_TYPE": ctype,
+                            "CONTENT_LENGTH": str(length),
+                        },
+                    )
+                    did_raw = form.getvalue("device_id")
+                    name = form.getvalue("name") or ""
+                    file_item = form["image"] if "image" in form else None
+                    if file_item is None or not getattr(file_item, "file", None):
+                        self._json(400, {"error": "缺少 image 文件"})
+                        return
+                    content = file_item.file.read()
+                    filename = getattr(file_item, "filename", None) or "upload.jpg"
+                    fctype = getattr(file_item, "type", None) or "application/octet-stream"
+                    result = upload_device_image(
+                        client,
+                        parse_device_id(did_raw),
+                        filename=filename,
+                        content=content,
+                        name=str(name or ""),
+                        content_type=str(fctype),
+                    )
+                elif "application/json" in ctype:
+                    payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+                    raw = base64.b64decode(payload.get("content_base64") or "")
+                    result = upload_device_image(
+                        client,
+                        parse_device_id(payload.get("device_id")),
+                        filename=(payload.get("filename") or "upload.jpg"),
+                        content=raw,
+                        name=str(payload.get("name") or ""),
+                    )
+                else:
+                    self._json(400, {"error": "需要 multipart/form-data 或 JSON content_base64"})
+                    return
+                self._json(200, result)
+            except ValueError as e:
+                self._json(400, {"error": str(e)})
+            except Exception as e:
+                self._json(400, {"error": str(e)})
             return
 
         if not (
@@ -649,6 +747,30 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             self._json(500, {"error": str(e)})
 
+    def do_DELETE(self) -> None:
+        from field_warmup import request_gate
+
+        with request_gate(urlparse(self.path).path):
+            self._do_DELETE()
+
+    def _do_DELETE(self) -> None:
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip("/")
+        # DELETE /api/device-images/{id}
+        m = re.search(r"/device-images/(\d+)/?$", path)
+        if not m:
+            self._json(404, {"error": "not found"})
+            return
+        try:
+            cfg = {**load_config(), **self.config}
+            client = client_from_config(cfg)
+            aid = parse_attachment_id(m.group(1))
+            self._json(200, delete_device_image(client, aid))
+        except ValueError as e:
+            self._json(400, {"error": str(e)})
+        except Exception as e:
+            self._json(400, {"error": str(e)})
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="ODF field registration API")
@@ -675,6 +797,10 @@ def main() -> None:
     print("  POST /api/audit/beacon 设备信息上报")
     print("  GET  /api/tree        厂区-机房-ODF路由")
     print("  GET  /api/odf-panel   端口面板+光损")
+    print("  GET  /api/device-images?device_id=")
+    print("  GET  /api/device-images/{id}/file")
+    print("  POST /api/device-images   multipart/JSON upload")
+    print("  DELETE /api/device-images/{id}")
     print("  GET  /cache/status    缓存状态")
     print("  POST /cache/refresh   更新占用/全量重建")
     print("  POST /cache/invalidate  缓存失效(Webhook)")

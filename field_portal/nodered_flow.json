@@ -11,7 +11,11 @@
     "type": "inject",
     "z": "odf_field_tab",
     "name": "启动时加载配置",
-    "props": [{"p": "payload"}],
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
     "repeat": "",
     "crontab": "",
     "once": true,
@@ -21,7 +25,11 @@
     "payloadType": "json",
     "x": 180,
     "y": 40,
-    "wires": [["odf_set_cfg"]]
+    "wires": [
+      [
+        "odf_set_cfg"
+      ]
+    ]
   },
   {
     "id": "odf_set_cfg",
@@ -32,7 +40,9 @@
     "outputs": 1,
     "x": 400,
     "y": 40,
-    "wires": [[]]
+    "wires": [
+      []
+    ]
   },
   {
     "id": "odf_http_root",
@@ -44,7 +54,11 @@
     "upload": false,
     "x": 140,
     "y": 100,
-    "wires": [["odf_proxy_portal"]]
+    "wires": [
+      [
+        "odf_proxy_portal"
+      ]
+    ]
   },
   {
     "id": "odf_http_portal",
@@ -56,7 +70,11 @@
     "upload": false,
     "x": 150,
     "y": 140,
-    "wires": [["odf_proxy_portal"]]
+    "wires": [
+      [
+        "odf_proxy_portal"
+      ]
+    ]
   },
   {
     "id": "odf_proxy_portal",
@@ -67,7 +85,11 @@
     "outputs": 1,
     "x": 340,
     "y": 120,
-    "wires": [["odf_http_req"]]
+    "wires": [
+      [
+        "odf_http_req"
+      ]
+    ]
   },
   {
     "id": "odf_http_trunk",
@@ -79,7 +101,11 @@
     "upload": false,
     "x": 160,
     "y": 240,
-    "wires": [["odf_proxy_trunk"]]
+    "wires": [
+      [
+        "odf_proxy_trunk"
+      ]
+    ]
   },
   {
     "id": "odf_proxy_trunk",
@@ -90,7 +116,11 @@
     "outputs": 1,
     "x": 360,
     "y": 240,
-    "wires": [["odf_http_req"]]
+    "wires": [
+      [
+        "odf_http_req"
+      ]
+    ]
   },
   {
     "id": "odf_http_form",
@@ -102,7 +132,11 @@
     "upload": false,
     "x": 150,
     "y": 200,
-    "wires": [["odf_proxy_form"]]
+    "wires": [
+      [
+        "odf_proxy_form"
+      ]
+    ]
   },
   {
     "id": "odf_proxy_form",
@@ -113,7 +147,11 @@
     "outputs": 1,
     "x": 340,
     "y": 200,
-    "wires": [["odf_http_req"]]
+    "wires": [
+      [
+        "odf_http_req"
+      ]
+    ]
   },
   {
     "id": "odf_http_api_get",
@@ -125,7 +163,11 @@
     "upload": false,
     "x": 150,
     "y": 280,
-    "wires": [["odf_proxy_api_root"]]
+    "wires": [
+      [
+        "odf_proxy_api_root"
+      ]
+    ]
   },
   {
     "id": "odf_http_odf_api_get",
@@ -137,29 +179,41 @@
     "upload": false,
     "x": 160,
     "y": 320,
-    "wires": [["odf_proxy_api_odf"]]
+    "wires": [
+      [
+        "odf_proxy_api_odf"
+      ]
+    ]
   },
   {
     "id": "odf_proxy_api_root",
     "type": "function",
     "z": "odf_field_tab",
     "name": "转发 /api GET",
-    "func": "const cfg = global.get('fieldPortal') || flow.get('fieldPortal') || {};\nconst base = cfg.field_api_url || 'http://127.0.0.1:8765';\nconst p = msg.req.params.path || 'tree';\nconst q = msg.req.query || {};\nconst qs = Object.keys(q).map(k => k + '=' + encodeURIComponent(q[k])).join('&');\nconst req = msg.req || {};\nconst h = req.headers || {};\nlet ip = String((h['x-forwarded-for'] || '').split(',')[0].trim() || h['x-real-ip'] || req.ip || (req.connection && req.connection.remoteAddress) || '').replace(/^::ffff:/, '');\nmsg.url = base + '/api/' + p + (qs ? '?' + qs : '');\nmsg.method = 'GET';\nmsg.headers = Object.assign({}, msg.headers || {}, {\n  'X-Forwarded-For': ip || 'unknown',\n  'X-Real-IP': ip || 'unknown',\n  'User-Agent': h['user-agent'] || '',\n  'Accept-Language': h['accept-language'] || '',\n  'Cache-Control': 'no-cache'\n});\nreturn msg;",
+    "func": "const cfg = global.get('fieldPortal') || flow.get('fieldPortal') || {};\\nconst base = cfg.field_api_url || 'http://127.0.0.1:8765';\\nconst p = msg.req.params.path || 'tree';\\nconst q = msg.req.query || {};\\nconst qs = Object.keys(q).map(k => k + '=' + encodeURIComponent(q[k])).join('&');\\nconst req = msg.req || {};\nconst h = req.headers || {};\nlet ip = String((h['x-forwarded-for'] || '').split(',')[0].trim() || h['x-real-ip'] || req.ip || (req.connection && req.connection.remoteAddress) || '').replace(/^::ffff:/, '');\\nmsg.url = base + '/api/' + p + (qs ? '?' + qs : '');\\nmsg.method = 'GET';\\nmsg.isImageFile = String(p).endsWith('/file');\\nmsg.headers = Object.assign({}, msg.headers || {}, {\\n  'X-Forwarded-For': ip || 'unknown',\\n  'X-Real-IP': ip || 'unknown',\\n  'User-Agent': h['user-agent'] || '',\\n  'Accept-Language': h['accept-language'] || '',\\n  'Cache-Control': 'no-cache'\\n});\\nreturn msg;",
     "outputs": 1,
     "x": 360,
     "y": 280,
-    "wires": [["odf_http_req"]]
+    "wires": [
+      [
+        "odf_sw_img_file"
+      ]
+    ]
   },
   {
     "id": "odf_proxy_api_odf",
     "type": "function",
     "z": "odf_field_tab",
     "name": "转发 /odf/api GET",
-    "func": "const cfg = global.get('fieldPortal') || flow.get('fieldPortal') || {};\nconst base = cfg.field_api_url || 'http://127.0.0.1:8765';\nconst p = msg.req.params.path || 'context';\nconst q = msg.req.query || {};\nconst qs = Object.keys(q).map(k => k + '=' + encodeURIComponent(q[k])).join('&');\nconst req = msg.req || {};\nconst h = req.headers || {};\nlet ip = String((h['x-forwarded-for'] || '').split(',')[0].trim() || h['x-real-ip'] || req.ip || (req.connection && req.connection.remoteAddress) || '').replace(/^::ffff:/, '');\nmsg.url = base + '/api/' + p + (qs ? '?' + qs : '');\nmsg.method = 'GET';\nmsg.headers = Object.assign({}, msg.headers || {}, {\n  'X-Forwarded-For': ip || 'unknown',\n  'X-Real-IP': ip || 'unknown',\n  'User-Agent': h['user-agent'] || '',\n  'Accept-Language': h['accept-language'] || '',\n  'Cache-Control': 'no-cache'\n});\nreturn msg;",
+    "func": "const cfg = global.get('fieldPortal') || flow.get('fieldPortal') || {};\\nconst base = cfg.field_api_url || 'http://127.0.0.1:8765';\\nconst p = msg.req.params.path || 'context';\\nconst q = msg.req.query || {};\\nconst qs = Object.keys(q).map(k => k + '=' + encodeURIComponent(q[k])).join('&');\\nconst req = msg.req || {};\nconst h = req.headers || {};\nlet ip = String((h['x-forwarded-for'] || '').split(',')[0].trim() || h['x-real-ip'] || req.ip || (req.connection && req.connection.remoteAddress) || '').replace(/^::ffff:/, '');\\nmsg.url = base + '/api/' + p + (qs ? '?' + qs : '');\\nmsg.method = 'GET';\\nmsg.isImageFile = String(p).endsWith('/file');\\nmsg.headers = Object.assign({}, msg.headers || {}, {\\n  'X-Forwarded-For': ip || 'unknown',\\n  'X-Real-IP': ip || 'unknown',\\n  'User-Agent': h['user-agent'] || '',\\n  'Accept-Language': h['accept-language'] || '',\\n  'Cache-Control': 'no-cache'\\n});\\nreturn msg;",
     "outputs": 1,
     "x": 370,
     "y": 320,
-    "wires": [["odf_http_req"]]
+    "wires": [
+      [
+        "odf_sw_img_file"
+      ]
+    ]
   },
   {
     "id": "odf_http_api_post",
@@ -171,7 +225,11 @@
     "upload": false,
     "x": 170,
     "y": 400,
-    "wires": [["odf_proxy_submit_root"]]
+    "wires": [
+      [
+        "odf_proxy_submit_root"
+      ]
+    ]
   },
   {
     "id": "odf_http_odf_api_post",
@@ -183,7 +241,11 @@
     "upload": false,
     "x": 180,
     "y": 440,
-    "wires": [["odf_proxy_submit_odf"]]
+    "wires": [
+      [
+        "odf_proxy_submit_odf"
+      ]
+    ]
   },
   {
     "id": "odf_proxy_submit_root",
@@ -194,7 +256,11 @@
     "outputs": 1,
     "x": 370,
     "y": 400,
-    "wires": [["odf_http_req"]]
+    "wires": [
+      [
+        "odf_http_req"
+      ]
+    ]
   },
   {
     "id": "odf_proxy_submit_odf",
@@ -205,7 +271,11 @@
     "outputs": 1,
     "x": 380,
     "y": 440,
-    "wires": [["odf_http_req"]]
+    "wires": [
+      [
+        "odf_http_req"
+      ]
+    ]
   },
   {
     "id": "odf_http_room_order",
@@ -217,7 +287,11 @@
     "upload": false,
     "x": 190,
     "y": 520,
-    "wires": [["odf_proxy_room_order"]]
+    "wires": [
+      [
+        "odf_proxy_room_order"
+      ]
+    ]
   },
   {
     "id": "odf_proxy_room_order",
@@ -228,7 +302,11 @@
     "outputs": 1,
     "x": 400,
     "y": 520,
-    "wires": [["odf_http_req"]]
+    "wires": [
+      [
+        "odf_http_req"
+      ]
+    ]
   },
   {
     "id": "odf_http_beacon",
@@ -240,7 +318,11 @@
     "upload": false,
     "x": 200,
     "y": 580,
-    "wires": [["odf_proxy_beacon"]]
+    "wires": [
+      [
+        "odf_proxy_beacon"
+      ]
+    ]
   },
   {
     "id": "odf_http_beacon_odf",
@@ -252,7 +334,11 @@
     "upload": false,
     "x": 210,
     "y": 620,
-    "wires": [["odf_proxy_beacon"]]
+    "wires": [
+      [
+        "odf_proxy_beacon"
+      ]
+    ]
   },
   {
     "id": "odf_proxy_beacon",
@@ -263,7 +349,185 @@
     "outputs": 1,
     "x": 410,
     "y": 600,
-    "wires": [["odf_http_req"]]
+    "wires": [
+      [
+        "odf_http_req"
+      ]
+    ]
+  },
+  {
+    "id": "odf_sw_img_file",
+    "type": "switch",
+    "z": "odf_field_tab",
+    "name": "图片文件?",
+    "property": "isImageFile",
+    "propertyType": "msg",
+    "rules": [
+      {
+        "t": "true"
+      },
+      {
+        "t": "else"
+      }
+    ],
+    "checkall": "false",
+    "repair": false,
+    "outputs": 2,
+    "x": 520,
+    "y": 300,
+    "wires": [
+      [
+        "odf_http_req_bin"
+      ],
+      [
+        "odf_http_req"
+      ]
+    ]
+  },
+  {
+    "id": "odf_http_req_bin",
+    "type": "http request",
+    "z": "odf_field_tab",
+    "name": "Field API (bin)",
+    "method": "use",
+    "ret": "bin",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "authType": "",
+    "x": 700,
+    "y": 260,
+    "wires": [
+      [
+        "odf_proxy_img_headers"
+      ]
+    ]
+  },
+  {
+    "id": "odf_proxy_img_headers",
+    "type": "function",
+    "z": "odf_field_tab",
+    "name": "图片响应头",
+    "func": "msg.statusCode = msg.statusCode || 200;\\nconst ct = (msg.headers && (msg.headers['content-type'] || msg.headers['Content-Type'])) || 'application/octet-stream';\\nmsg.headers = { 'Content-Type': ct, 'Cache-Control': 'private, max-age=60' };\\nreturn msg;",
+    "outputs": 1,
+    "x": 880,
+    "y": 260,
+    "wires": [
+      [
+        "odf_http_res"
+      ]
+    ]
+  },
+  {
+    "id": "odf_http_device_images",
+    "type": "http in",
+    "z": "odf_field_tab",
+    "name": "POST /api/device-images",
+    "url": "/api/device-images",
+    "method": "post",
+    "upload": false,
+    "x": 200,
+    "y": 680,
+    "wires": [
+      [
+        "odf_proxy_device_images"
+      ]
+    ]
+  },
+  {
+    "id": "odf_http_odf_device_images",
+    "type": "http in",
+    "z": "odf_field_tab",
+    "name": "POST /odf/api/device-images",
+    "url": "/odf/api/device-images",
+    "method": "post",
+    "upload": false,
+    "x": 210,
+    "y": 720,
+    "wires": [
+      [
+        "odf_proxy_odf_device_images"
+      ]
+    ]
+  },
+  {
+    "id": "odf_proxy_device_images",
+    "type": "function",
+    "z": "odf_field_tab",
+    "name": "转发 /api device-images",
+    "func": "const cfg = global.get('fieldPortal') || flow.get('fieldPortal') || {};\\nconst base = cfg.field_api_url || 'http://127.0.0.1:8765';\\nconst req = msg.req || {};\nconst h = req.headers || {};\nlet ip = String((h['x-forwarded-for'] || '').split(',')[0].trim() || h['x-real-ip'] || req.ip || (req.connection && req.connection.remoteAddress) || '').replace(/^::ffff:/, '');\\nmsg.url = base + '/api/device-images';\\nmsg.method = 'POST';\\nmsg.headers = {\\n  'Content-Type': 'application/json',\\n  'X-Forwarded-For': ip || 'unknown',\\n  'X-Real-IP': ip || 'unknown',\\n  'User-Agent': h['user-agent'] || '',\\n  'Accept-Language': h['accept-language'] || ''\\n};\\nmsg.payload = msg.payload;\\nreturn msg;",
+    "outputs": 1,
+    "x": 410,
+    "y": 680,
+    "wires": [
+      [
+        "odf_http_req"
+      ]
+    ]
+  },
+  {
+    "id": "odf_proxy_odf_device_images",
+    "type": "function",
+    "z": "odf_field_tab",
+    "name": "转发 /odf/api device-images",
+    "func": "const cfg = global.get('fieldPortal') || flow.get('fieldPortal') || {};\\nconst base = cfg.field_api_url || 'http://127.0.0.1:8765';\\nconst req = msg.req || {};\nconst h = req.headers || {};\nlet ip = String((h['x-forwarded-for'] || '').split(',')[0].trim() || h['x-real-ip'] || req.ip || (req.connection && req.connection.remoteAddress) || '').replace(/^::ffff:/, '');\\nmsg.url = base + '/api/device-images';\\nmsg.method = 'POST';\\nmsg.headers = {\\n  'Content-Type': 'application/json',\\n  'X-Forwarded-For': ip || 'unknown',\\n  'X-Real-IP': ip || 'unknown',\\n  'User-Agent': h['user-agent'] || '',\\n  'Accept-Language': h['accept-language'] || ''\\n};\\nmsg.payload = msg.payload;\\nreturn msg;",
+    "outputs": 1,
+    "x": 420,
+    "y": 720,
+    "wires": [
+      [
+        "odf_http_req"
+      ]
+    ]
+  },
+  {
+    "id": "odf_http_del_device_images",
+    "type": "http in",
+    "z": "odf_field_tab",
+    "name": "DELETE /api/device-images/:id",
+    "url": "/api/device-images/:id",
+    "method": "delete",
+    "upload": false,
+    "x": 220,
+    "y": 780,
+    "wires": [
+      [
+        "odf_proxy_del_device_images"
+      ]
+    ]
+  },
+  {
+    "id": "odf_http_del_odf_device_images",
+    "type": "http in",
+    "z": "odf_field_tab",
+    "name": "DELETE /odf/api/device-images/:id",
+    "url": "/odf/api/device-images/:id",
+    "method": "delete",
+    "upload": false,
+    "x": 230,
+    "y": 820,
+    "wires": [
+      [
+        "odf_proxy_del_device_images"
+      ]
+    ]
+  },
+  {
+    "id": "odf_proxy_del_device_images",
+    "type": "function",
+    "z": "odf_field_tab",
+    "name": "转发 DELETE device-images",
+    "func": "const cfg = global.get('fieldPortal') || flow.get('fieldPortal') || {};\\nconst base = cfg.field_api_url || 'http://127.0.0.1:8765';\\nconst id = msg.req.params.id;\\nconst req = msg.req || {};\nconst h = req.headers || {};\nlet ip = String((h['x-forwarded-for'] || '').split(',')[0].trim() || h['x-real-ip'] || req.ip || (req.connection && req.connection.remoteAddress) || '').replace(/^::ffff:/, '');\\nmsg.url = base + '/api/device-images/' + id;\\nmsg.method = 'DELETE';\\nmsg.headers = {\\n  'X-Forwarded-For': ip || 'unknown',\\n  'X-Real-IP': ip || 'unknown',\\n  'User-Agent': h['user-agent'] || '',\\n  'Accept-Language': h['accept-language'] || ''\\n};\\nmsg.payload = {};\\nreturn msg;",
+    "outputs": 1,
+    "x": 430,
+    "y": 800,
+    "wires": [
+      [
+        "odf_http_req"
+      ]
+    ]
   },
   {
     "id": "odf_http_req",
@@ -280,7 +544,11 @@
     "authType": "",
     "x": 560,
     "y": 280,
-    "wires": [["odf_http_res"]]
+    "wires": [
+      [
+        "odf_http_res"
+      ]
+    ]
   },
   {
     "id": "odf_http_res",

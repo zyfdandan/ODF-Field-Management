@@ -56,6 +56,7 @@ module.exports = {
     disableEditor: true,
     httpAdminRoot: '/admin',
     httpNodeRoot: '/',
+    apiMaxLength: '25mb',
     functionGlobalContext: {
         fieldPortal: { field_api_url: 'http://127.0.0.1:8765' }
     }

@@ -323,7 +323,7 @@ def _build_route_port_grid(
 
     return {
         "odf": odf_name,
-        "device_id": str(did or (device_meta or {}).get("id") or ""),
+        "device_id": did,
         "display_name": entry.get("display_name") or odf_name,
         "route_key": entry.get("route_key") or odf_name,
         "cable_filter": cable_label,
@@ -1164,6 +1164,7 @@ def get_odf_modal_panel(
         "cabinet": parsed["cabinet"],
         "odf_no": parsed["odf_no"],
         "device_url": grid.get("device_url") or f"{web_base.rstrip('/')}/dcim/devices/{did}/",
+        "device_id": int(grid.get("device_id") or did),
         "cables": grid.get("cables") or [],
         "fibers": grid.get("fibers") or [],
         "neighbors": [],
@@ -1445,6 +1446,7 @@ def get_odf_port_panel(
         "cabinet": parsed["cabinet"],
         "odf_no": parsed["odf_no"],
         "device_url": f"{web_base.rstrip('/')}/dcim/devices/{did}/",
+        "device_id": did,
         "cables": cables_sections,
         "neighbors": ctx.get("neighbors", []),
         "peer_options": ctx.get("peer_options", []),

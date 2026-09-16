@@ -51,6 +51,42 @@
     .odf-meta a { color:#90caf9; }
     .cable-block { background:var(--card); border-radius:12px; padding:12px; margin-bottom:10px; }
     .cable-title { font-size:.85rem; font-weight:600; margin-bottom:2px; word-break:break-all; }
+    .cable-title-row { display:flex; align-items:flex-start; gap:8px; flex-wrap:wrap; }
+    .cable-title-row .cable-title { flex:1; min-width:0; margin-bottom:0; }
+    .img-btn {
+      flex:0 0 auto; border:1px solid var(--border); background:#15202b; color:#90caf9;
+      border-radius:8px; padding:4px 10px; font-size:.72rem; font-weight:600;
+      min-height:32px; cursor:pointer; touch-action:manipulation;
+    }
+    .img-btn:active { background:#1a2836; }
+    .img-modal-bg { z-index:120; }
+    .img-grid {
+      display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:10px;
+      margin:8px 0 14px;
+    }
+    .img-thumb {
+      aspect-ratio:1; border-radius:10px; border:1px solid var(--border);
+      background:#0d1218; overflow:hidden; cursor:pointer; padding:0; width:100%;
+    }
+    .img-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+    .img-card { display:flex; flex-direction:column; gap:6px; }
+    .img-actions { display:flex; gap:6px; }
+    .img-act {
+      flex:1; border:1px solid var(--border); background:#15202b; color:var(--text);
+      border-radius:8px; padding:6px 4px; font-size:.68rem; min-height:32px;
+      cursor:pointer; touch-action:manipulation;
+    }
+    .img-act:active { background:#1a2836; }
+    .img-act.danger { color:#ef9a9a; border-color:#5a3030; }
+    .img-empty { color:var(--muted); font-size:.8rem; line-height:1.45; padding:12px 0; }
+    .img-preview {
+      display:none; margin:0 0 12px; border-radius:12px; overflow:hidden;
+      border:1px solid var(--border); background:#000; text-align:center;
+    }
+    .img-preview.open { display:block; }
+    .img-preview img { max-width:100%; max-height:50vh; object-fit:contain; vertical-align:middle; }
+    .img-upload-row { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+    .img-upload-row input[type=file] { font-size:.8rem; color:var(--muted); }
     .cable-sub { font-size:.72rem; color:var(--muted); margin-bottom:10px; }
     .port-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(var(--port), 1fr)); gap:8px; }
     .port {
@@ -393,6 +429,26 @@
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<div class="modal-bg img-modal-bg" id="imgModalBg">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-head">
+      <button type="button" class="close-x" id="imgModalClose" aria-label="关闭">&times;</button>
+      <h3 id="imgModalTitle">设备图片</h3>
+      <div class="sub" id="imgModalSub">查看或上传现场照片</div>
+    </div>
+    <div id="imgPreview" class="img-preview"><img id="imgPreviewEl" alt="预览"></div>
+    <div id="imgGrid" class="img-grid"></div>
+    <div id="imgEmpty" class="img-empty" style="display:none">暂无图片，可在下方上传</div>
+    <div class="img-upload-row">
+      <input type="file" id="imgFile" accept="image/*" capture="environment">
+      <input type="file" id="imgReplaceFile" accept="image/*" capture="environment" style="display:none">
+      <button type="button" class="btn" id="imgUploadBtn">上传图片</button>
+    </div>
+    <div id="imgToast" class="toast"></div>
   </div>
 </div>
 
@@ -1882,9 +1938,13 @@
       const title = op.display_name || op.odf;
       const rk = op.route_key || '';
       const connBadge = connBadgeHtml(op);
+      const did = op.device_id || 0;
+      const imgBtn = did
+        ? `<button type="button" class="img-btn" data-device-id="${did}" data-title="${esc(title)}" onclick="event.stopPropagation()">图片</button>`
+        : '';
       html += `<div class="odf-block" data-route-key="${esc(rk)}" data-idx="${idx}">
         <div class="odf-block-head"><span class="odf-drag" title="拖拽排序">⋮⋮</span>
-          <div style="flex:1;min-width:0"><div class="cable-title">${esc(title)}${connBadge}</div>
+          <div style="flex:1;min-width:0"><div class="cable-title-row"><div class="cable-title">${esc(title)}${connBadge}</div>${imgBtn}</div>
           <div class="cable-sub">${esc(op.cable_filter || (op.cables[0] && op.cables[0].cable) || '')} → 对端 ${esc((op.cables[0] && (op.cables[0].peer_display_name || op.cables[0].peer_odf)) || '—')}
             · <a href="${op.device_url}" target="_blank" onclick="event.stopPropagation()">NetBox</a></div></div></div>
         <div class="odf-block-body">`;
@@ -1904,6 +1964,13 @@
     bindPortClicks();
     bindOdfSort();
     bindConnectorSelects();
+    document.querySelectorAll('.img-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        openImgModal(Number(btn.dataset.deviceId), btn.dataset.title || '');
+      });
+    });
   }
 
   function applyConnectorClass(badge, code) {
@@ -1973,7 +2040,7 @@
   function bindOdfSort() {
     document.querySelectorAll('.odf-block-head').forEach(head => {
       head.addEventListener('pointerdown', e => {
-        if (e.target.closest('a, .conn-wrap, .conn-badge')) return;
+        if (e.target.closest('a, .conn-wrap, .conn-badge, .img-btn')) return;
         e.preventDefault();
         dragBlock = head.closest('.odf-block');
         dragPointerId = e.pointerId;
@@ -2183,6 +2250,193 @@
     document.body.style.overflow = '';
     modalPortEl = null;
   }
+
+  let imgDeviceId = 0;
+  let imgReplaceId = 0;
+
+  function imgApiPath(path) {
+    if ((location.pathname || '').startsWith('/odf') && path.startsWith('/api/')) {
+      return '/odf' + path;
+    }
+    return path;
+  }
+
+  async function openImgModal(deviceId, title) {
+    imgDeviceId = deviceId;
+    imgReplaceId = 0;
+    $('imgModalTitle').textContent = title || ('设备 #' + deviceId);
+    $('imgPreview').classList.remove('open');
+    $('imgModalBg').classList.add('open');
+    $('imgToast').className = 'toast loading';
+    $('imgToast').textContent = '加载图片…';
+    await refreshImgGrid();
+  }
+
+  async function refreshImgGrid() {
+    try {
+      const data = await apiGet('/device-images?device_id=' + encodeURIComponent(imgDeviceId));
+      const grid = $('imgGrid');
+      grid.innerHTML = '';
+      const results = data.results || [];
+      $('imgEmpty').style.display = results.length ? 'none' : 'block';
+      results.forEach(it => {
+        const card = document.createElement('div');
+        card.className = 'img-card';
+        const src = imgApiPath(it.file_url);
+        const thumb = document.createElement('button');
+        thumb.type = 'button';
+        thumb.className = 'img-thumb';
+        thumb.innerHTML = '<img alt="" loading="lazy" src="' + src + '">';
+        thumb.onclick = () => {
+          $('imgPreviewEl').src = src;
+          $('imgPreview').classList.add('open');
+        };
+        const actions = document.createElement('div');
+        actions.className = 'img-actions';
+        const btnRep = document.createElement('button');
+        btnRep.type = 'button';
+        btnRep.className = 'img-act';
+        btnRep.textContent = '替换';
+        btnRep.onclick = e => {
+          e.stopPropagation();
+          imgReplaceId = it.id;
+          $('imgReplaceFile').value = '';
+          $('imgReplaceFile').click();
+        };
+        const btnDel = document.createElement('button');
+        btnDel.type = 'button';
+        btnDel.className = 'img-act danger';
+        btnDel.textContent = '删除';
+        btnDel.onclick = e => {
+          e.stopPropagation();
+          deleteDeviceImage(it.id);
+        };
+        actions.appendChild(btnRep);
+        actions.appendChild(btnDel);
+        card.appendChild(thumb);
+        card.appendChild(actions);
+        grid.appendChild(card);
+      });
+      $('imgToast').className = 'toast';
+      $('imgToast').textContent = '';
+    } catch (e) {
+      $('imgToast').className = 'toast err';
+      $('imgToast').textContent = '加载失败：' + (e.message || e);
+    }
+  }
+
+  function closeImgModal() {
+    $('imgModalBg').classList.remove('open');
+    $('imgPreview').classList.remove('open');
+    $('imgPreviewEl').src = '';
+    $('imgFile').value = '';
+    $('imgReplaceFile').value = '';
+    imgReplaceId = 0;
+  }
+
+  function bytesToBase64(u8) {
+    let s = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < u8.length; i += chunk) {
+      s += String.fromCharCode.apply(null, u8.subarray(i, i + chunk));
+    }
+    return btoa(s);
+  }
+
+  async function uploadDeviceImage(deviceId, file) {
+    // Always JSON+base64: Node-RED proxies /api and /odf/api as JSON; multipart
+    // JPEG bodies are misread as UTF-8 (0xff decode errors).
+    const u8 = new Uint8Array(await file.arrayBuffer());
+    const r = await fetch(api + '/device-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        device_id: deviceId,
+        name: file.name,
+        filename: file.name,
+        content_base64: bytesToBase64(u8),
+      }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+    return data;
+  }
+
+  async function deleteDeviceImage(attachmentId) {
+    if (!confirm('确定删除这张图片？')) return;
+    $('imgToast').className = 'toast loading';
+    $('imgToast').textContent = '删除中…';
+    try {
+      const r = await fetch(api + '/device-images/' + encodeURIComponent(attachmentId), { method: 'DELETE' });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+      $('imgPreview').classList.remove('open');
+      $('imgPreviewEl').src = '';
+      $('imgToast').className = 'toast ok';
+      $('imgToast').textContent = '已删除';
+      await refreshImgGrid();
+    } catch (e) {
+      $('imgToast').className = 'toast err';
+      $('imgToast').textContent = '删除失败：' + (e.message || e);
+    }
+  }
+
+  async function replaceDeviceImage(attachmentId, file) {
+    // Upload first; only delete old after success so a failed upload keeps the original.
+    await uploadDeviceImage(imgDeviceId, file);
+    const r = await fetch(api + '/device-images/' + encodeURIComponent(attachmentId), { method: 'DELETE' });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || ('新图已上传，但删除旧图失败：HTTP ' + r.status));
+  }
+
+  $('imgModalClose').onclick = closeImgModal;
+  $('imgModalBg').onclick = e => { if (e.target === $('imgModalBg')) closeImgModal(); };
+
+  $('imgUploadBtn').onclick = async () => {
+    const f = $('imgFile').files && $('imgFile').files[0];
+    if (!f) {
+      $('imgToast').className = 'toast err';
+      $('imgToast').textContent = '请先选择图片';
+      return;
+    }
+    $('imgToast').className = 'toast loading';
+    $('imgToast').textContent = '上传中…';
+    $('imgUploadBtn').disabled = true;
+    try {
+      await uploadDeviceImage(imgDeviceId, f);
+      $('imgToast').className = 'toast ok';
+      $('imgToast').textContent = '上传成功';
+      $('imgFile').value = '';
+      await refreshImgGrid();
+    } catch (e) {
+      $('imgToast').className = 'toast err';
+      $('imgToast').textContent = '上传失败：' + (e.message || e);
+    } finally {
+      $('imgUploadBtn').disabled = false;
+    }
+  };
+
+  $('imgReplaceFile').onchange = async () => {
+    const f = $('imgReplaceFile').files && $('imgReplaceFile').files[0];
+    const oldId = imgReplaceId;
+    if (!f || !oldId) return;
+    $('imgToast').className = 'toast loading';
+    $('imgToast').textContent = '替换中…';
+    try {
+      await replaceDeviceImage(oldId, f);
+      $('imgToast').className = 'toast ok';
+      $('imgToast').textContent = '替换成功';
+      $('imgPreview').classList.remove('open');
+      $('imgPreviewEl').src = '';
+      await refreshImgGrid();
+    } catch (e) {
+      $('imgToast').className = 'toast err';
+      $('imgToast').textContent = '替换失败：' + (e.message || e);
+    } finally {
+      imgReplaceId = 0;
+      $('imgReplaceFile').value = '';
+    }
+  };
 
   document.querySelectorAll('#modalTabs button').forEach(btn => {
     btn.onclick = () => {
